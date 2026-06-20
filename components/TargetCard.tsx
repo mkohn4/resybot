@@ -54,6 +54,8 @@ export function TargetCard({
 }) {
   const [expanded, setExpanded] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [sniping, setSniping] = useState(false)
+  const [snipeResult, setSnipeResult] = useState<{ success: boolean; message?: string; slot?: string } | null>(null)
 
   const reservationDate = new Date(target.date).toLocaleDateString("en-US", {
     weekday: "short",
@@ -81,6 +83,21 @@ export function TargetCard({
   async function handleDelete() {
     setDeleting(true)
     await onDelete()
+  }
+
+  async function handleTryNow() {
+    setSniping(true)
+    setSnipeResult(null)
+    try {
+      const res = await fetch(`/api/targets/${target.id}/snipe`, { method: "POST" })
+      const data = await res.json()
+      setSnipeResult(data)
+      if (data.success) onRefresh()
+    } catch {
+      setSnipeResult({ success: false, message: "Request failed" })
+    } finally {
+      setSniping(false)
+    }
   }
 
   return (
@@ -116,6 +133,15 @@ export function TargetCard({
           </button>
           {target.status !== "BOOKED" && (
             <button
+              onClick={handleTryNow}
+              disabled={sniping || target.status === "SNIPING"}
+              className="text-xs bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 px-2.5 py-1 rounded-lg transition-colors disabled:opacity-40"
+            >
+              {sniping ? "Trying…" : "Try Now"}
+            </button>
+          )}
+          {target.status !== "BOOKED" && (
+            <button
               onClick={handleDelete}
               disabled={deleting}
               className="text-gray-600 hover:text-red-400 transition-colors text-xs"
@@ -125,6 +151,19 @@ export function TargetCard({
           )}
         </div>
       </div>
+
+      {snipeResult && (
+        <div className={`px-4 py-2.5 border-t text-xs font-medium ${
+          snipeResult.success
+            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+            : "border-red-500/30 bg-red-500/10 text-red-400"
+        }`}>
+          {snipeResult.success
+            ? `Booked! ${snipeResult.slot ? (() => { const t = snipeResult.slot!.split(" ")[1]?.substring(0,5) ?? ""; const [h,m] = t.split(":").map(Number); return `${h>12?h-12:h}:${m.toString().padStart(2,"0")}${h>=12?"pm":"am"}` })() : ""}`
+            : `No slots available: ${snipeResult.message}`
+          }
+        </div>
+      )}
 
       {expanded && (
         <div className="border-t border-gray-800 px-4 py-3 space-y-3">
