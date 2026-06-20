@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
 import { NYC_RESTAURANTS } from "@/lib/restaurants"
 
 const RESY_API_KEY = "VbWk7s3L4KiK5fzlO7JD3Q5EYolJI7n5"
@@ -16,13 +15,10 @@ const BASE_HEADERS = {
 }
 
 export async function GET(req: NextRequest) {
-  const session = await auth()
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
   const q = req.nextUrl.searchParams.get("q")?.trim() ?? ""
   if (q.length < 2) return NextResponse.json({ results: [] })
 
-  // Search curated list first
+  // Search curated list
   const curated = NYC_RESTAURANTS.filter(
     (r) =>
       r.name.toLowerCase().includes(q.toLowerCase()) ||
@@ -40,7 +36,7 @@ export async function GET(req: NextRequest) {
     source: "curated" as const,
   }))
 
-  // Also search Resy API live
+  // Also search Resy API live for restaurants not in the curated list
   let resyResults: typeof curated = []
   try {
     const today = new Date().toISOString().split("T")[0]
@@ -79,7 +75,7 @@ export async function GET(req: NextRequest) {
           priceRange: "",
           daysOut: null,
           releaseTime: null,
-          releaseNotes: "No release time data — check Reddit or restaurant website",
+          releaseNotes: "No release time data — set snipe time manually",
           source: "resy" as const,
         }))
     }
