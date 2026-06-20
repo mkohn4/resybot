@@ -3,16 +3,7 @@ import { NYC_RESTAURANTS } from "@/lib/restaurants"
 
 const RESY_API_KEY = "VbWk7s3L4KiK5fzlO7JD3Q5EYolJI7n5"
 
-const BASE_HEADERS = {
-  origin: "https://resy.com",
-  "x-origin": "https://resy.com",
-  "accept-language": "en-US,en;q=0.9",
-  authorization: `ResyAPI api_key="${RESY_API_KEY}"`,
-  accept: "application/json, text/plain, */*",
-  referer: "https://resy.com/",
-  "user-agent":
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-}
+const PRICE_LABELS: Record<number, string> = { 1: "$", 2: "$$", 3: "$$$", 4: "$$$$" }
 
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q")?.trim() ?? ""
@@ -36,43 +27,46 @@ export async function GET(req: NextRequest) {
     source: "curated" as const,
   }))
 
-  // Also search Resy API live for restaurants not in the curated list
+  // Search Resy live via the correct venue search endpoint
   let resyResults: typeof curated = []
   try {
-    const today = new Date().toISOString().split("T")[0]
-    const params = new URLSearchParams({
-      "x-resy-auth-token": "",
-      day: today,
-      lat: "40.7580",
-      long: "-73.9855",
-      party_size: "2",
-      query: q,
+    const res = await fetch("https://api.resy.com/3/venuesearch/search", {
+      method: "POST",
+      headers: {
+        origin: "https://resy.com",
+        "x-origin": "https://resy.com",
+        authorization: `ResyAPI api_key="${RESY_API_KEY}"`,
+        "content-type": "application/json",
+        accept: "application/json",
+        referer: "https://resy.com/",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      },
+      body: JSON.stringify({
+        query: q,
+        geo: { latitude: 40.758, longitude: -73.9855 },
+        per_page: 10,
+      }),
     })
-    const res = await fetch(`https://api.resy.com/4/find?${params}`, {
-      headers: BASE_HEADERS,
-    })
+
     if (res.ok) {
       const data = await res.json()
-      const venues = data?.results?.venues ?? []
+      const hits = data?.search?.hits ?? []
       const curatedIds = new Set(curated.map((r) => r.venueId))
 
-      resyResults = venues
-        .filter((v: { id?: { resy?: number } }) => {
-          const id = v?.id?.resy
-          return id && !curatedIds.has(id)
-        })
-        .slice(0, 8)
+      resyResults = hits
+        .filter((v: { id?: { resy?: number } }) => !curatedIds.has(v?.id?.resy ?? null))
         .map((v: {
           id?: { resy?: number }
           name?: string
-          location?: { neighborhood?: string }
-          type?: string
+          neighborhood?: string
+          cuisine?: string[]
+          price_range_id?: number
         }) => ({
           venueId: v?.id?.resy ?? null,
           name: v?.name ?? "Unknown",
-          neighborhood: v?.location?.neighborhood ?? "NYC",
-          cuisine: v?.type ?? "",
-          priceRange: "",
+          neighborhood: v?.neighborhood ?? "NYC",
+          cuisine: v?.cuisine?.[0] ?? "",
+          priceRange: PRICE_LABELS[v?.price_range_id ?? 0] ?? "",
           daysOut: null,
           releaseTime: null,
           releaseNotes: "No release time data — set snipe time manually",
@@ -80,7 +74,7 @@ export async function GET(req: NextRequest) {
         }))
     }
   } catch {
-    // Resy API failure is non-fatal — curated results still return
+    // non-fatal
   }
 
   return NextResponse.json({ results: [...curated, ...resyResults] })
