@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { signOut } from "next-auth/react"
+import Link from "next/link"
 import { AddTargetModal } from "./AddTargetModal"
 import { CredentialsModal } from "./CredentialsModal"
 import { TargetCard } from "./TargetCard"
@@ -69,6 +70,12 @@ export function DashboardClient({ user, initialTargets, hasCredentials }: Props)
             >
               {credsSaved ? "Resy ✓" : "Connect Resy"}
             </button>
+            <Link
+              href="/dashboard/lookup"
+              className="text-sm text-gray-400 hover:text-white transition-colors"
+            >
+              Venue Lookup
+            </Link>
             <button
               onClick={() => signOut({ callbackUrl: "/login" })}
               className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
