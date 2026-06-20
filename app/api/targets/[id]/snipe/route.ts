@@ -16,12 +16,12 @@ export async function POST(
   const { id } = await params
   const target = await prisma.reservationTarget.findFirst({
     where: { id, userId: session.user.id },
-    include: { user: { include: { resyCredential: true } } },
   })
   if (!target) return NextResponse.json({ error: "Target not found" }, { status: 404 })
   if (target.status === "BOOKED") return NextResponse.json({ error: "Already booked" }, { status: 400 })
 
-  const cred = target.user.resyCredential
+  // Fetch credential separately — Neon HTTP adapter doesn't support nested includes
+  const cred = await prisma.resyCredential.findUnique({ where: { userId: session.user.id } })
   if (!cred) return NextResponse.json({ error: "No Resy credentials on file" }, { status: 400 })
 
   // Get or refresh auth token

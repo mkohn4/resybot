@@ -22,8 +22,19 @@ export async function GET(req: NextRequest) {
         { status: "WATCHING", mode: "WATCH", date: { gte: now } },
       ],
     },
-    include: { user: { include: { resyCredential: true } } },
   })
+
+  // Fetch credentials separately — Neon HTTP adapter doesn't support nested includes
+  const userIds = [...new Set(targets.map((t) => t.userId))]
+  const credentials = await prisma.resyCredential.findMany({
+    where: { userId: { in: userIds } },
+  })
+  const credsByUserId = Object.fromEntries(credentials.map((c) => [c.userId, c]))
+
+  const targetsWithCreds = targets.map((t) => ({
+    ...t,
+    user: { resyCredential: credsByUserId[t.userId] ?? null },
+  }))
 
   // Auto-expire WATCH targets whose date has passed
   await prisma.reservationTarget.updateMany({
@@ -31,16 +42,16 @@ export async function GET(req: NextRequest) {
     data: { status: "FAILED" },
   })
 
-  if (targets.length === 0) return NextResponse.json({ processed: 0 })
+  if (targetsWithCreds.length === 0) return NextResponse.json({ processed: 0 })
 
   const results = await Promise.allSettled(
-    targets.map((t: typeof targets[number]) => processTarget(t))
+    targetsWithCreds.map((t) => processTarget(t))
   )
 
   const summary = results.map((r: PromiseSettledResult<{ success: boolean; slot?: string; error?: string }>, i: number) => ({
-    targetId: targets[i].id,
-    restaurant: targets[i].venueName,
-    mode: targets[i].mode,
+    targetId: targetsWithCreds[i].id,
+    restaurant: targetsWithCreds[i].venueName,
+    mode: targetsWithCreds[i].mode,
     result: r.status === "fulfilled" ? r.value : { error: String((r as PromiseRejectedResult).reason) },
   }))
 
