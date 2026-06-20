@@ -7,7 +7,7 @@ import { suggestSnipeTime } from "@/lib/restaurants"
 const PREFERRED_TIMES = ["18:30", "18:45", "19:00", "19:15", "19:30", "19:45", "20:00", "20:15", "20:30", "20:45", "21:00"]
 const DEFAULT_TIMES = ["19:30", "19:45", "20:00", "20:15", "20:30", "20:45", "21:00"]
 
-type Mode = "scheduled" | "now"
+type Mode = "scheduled" | "now" | "watch"
 
 export function AddTargetModal({
   onClose,
@@ -81,6 +81,10 @@ export function AddTargetModal({
       setError("Please set a snipe time")
       return
     }
+    if (mode === "watch" && !date) {
+      setError("Please set the reservation date to watch for")
+      return
+    }
     if (preferredTimes.length === 0) {
       setError("Select at least one preferred time")
       return
@@ -89,8 +93,7 @@ export function AddTargetModal({
     setError("")
     setNowResult(null)
 
-    // For "now" mode, snipe immediately after creating the target
-    const snipeTime = mode === "now"
+    const snipeTime = mode === "now" || mode === "watch"
       ? new Date().toISOString()
       : new Date(snipeAt).toISOString()
 
@@ -107,6 +110,7 @@ export function AddTargetModal({
           partySize,
           preferredTimes,
           snipeAt: snipeTime,
+          mode: mode === "watch" ? "WATCH" : "SNIPE",
           notificationEmail: notificationEmail || undefined,
         }),
       })
@@ -114,7 +118,6 @@ export function AddTargetModal({
       if (!res.ok) throw new Error(target.error ?? "Failed to add target")
 
       if (mode === "now") {
-        // Immediately fire the snipe
         const snipeRes = await fetch(`/api/targets/${target.id}/snipe`, { method: "POST" })
         const snipeData = await snipeRes.json()
         setNowResult(snipeData)
@@ -185,10 +188,10 @@ export function AddTargetModal({
         <h2 className="text-lg font-bold text-white mb-5">Add Reservation Target</h2>
 
         {/* Mode toggle */}
-        <div className="flex gap-2 mb-5 bg-gray-800 p-1 rounded-xl">
+        <div className="flex gap-1 mb-5 bg-gray-800 p-1 rounded-xl">
           <button
             onClick={() => setMode("scheduled")}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+            className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
               mode === "scheduled" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-gray-200"
             }`}
           >
@@ -196,22 +199,35 @@ export function AddTargetModal({
           </button>
           <button
             onClick={() => setMode("now")}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+            className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
               mode === "now" ? "bg-emerald-600 text-white" : "text-gray-400 hover:text-gray-200"
             }`}
           >
             Book Now
           </button>
+          <button
+            onClick={() => setMode("watch")}
+            className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
+              mode === "watch" ? "bg-amber-600 text-white" : "text-gray-400 hover:text-gray-200"
+            }`}
+          >
+            Watch
+          </button>
         </div>
 
         {mode === "scheduled" && (
           <p className="text-gray-500 text-xs mb-4 -mt-2">
-            Bot will wake up at your chosen time and snipe the moment reservations open.
+            Bot wakes up at your chosen time and snipes the moment reservations open.
           </p>
         )}
         {mode === "now" && (
           <p className="text-gray-500 text-xs mb-4 -mt-2">
             Immediately checks for available slots and books one right now.
+          </p>
+        )}
+        {mode === "watch" && (
+          <p className="text-amber-400/70 text-xs mb-4 -mt-2">
+            Polls every minute for cancellations. Books instantly when a slot in your preferred time range opens up.
           </p>
         )}
 
@@ -374,14 +390,14 @@ export function AddTargetModal({
             onClick={handleSubmit}
             disabled={loading}
             className={`flex-1 font-semibold py-2.5 rounded-lg transition-colors text-sm disabled:opacity-50 ${
-              mode === "now"
-                ? "bg-emerald-600 hover:bg-emerald-500 text-white"
-                : "bg-blue-600 hover:bg-blue-500 text-white"
+              mode === "now" ? "bg-emerald-600 hover:bg-emerald-500 text-white"
+              : mode === "watch" ? "bg-amber-600 hover:bg-amber-500 text-white"
+              : "bg-blue-600 hover:bg-blue-500 text-white"
             }`}
           >
             {loading
-              ? mode === "now" ? "Booking…" : "Scheduling…"
-              : mode === "now" ? "Book Now" : "Schedule Snipe"
+              ? mode === "now" ? "Booking…" : mode === "watch" ? "Starting…" : "Scheduling…"
+              : mode === "now" ? "Book Now" : mode === "watch" ? "Start Watching" : "Schedule Snipe"
             }
           </button>
         </div>

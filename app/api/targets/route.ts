@@ -20,21 +20,13 @@ export async function POST(req: NextRequest) {
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const body = await req.json()
-  const {
-    venueId,
-    venueName,
-    neighborhood,
-    cuisine,
-    date,
-    partySize,
-    preferredTimes,
-    snipeAt,
-    notificationEmail,
-  } = body
+  const { venueId, venueName, neighborhood, cuisine, date, partySize, preferredTimes, snipeAt, notificationEmail, mode } = body
 
   if (!venueId || !venueName || !date || !snipeAt) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
   }
+
+  const isWatch = mode === "WATCH"
 
   const target = await prisma.reservationTarget.create({
     data: {
@@ -47,8 +39,9 @@ export async function POST(req: NextRequest) {
       partySize: Number(partySize ?? 2),
       preferredTimes: preferredTimes ?? ["19:30", "19:45", "20:00", "20:15", "20:30", "20:45", "21:00"],
       snipeAt: new Date(snipeAt),
+      mode: isWatch ? "WATCH" : "SNIPE",
+      status: isWatch ? "WATCHING" : "PENDING",
       notificationEmail: notificationEmail ?? session.user.email,
-      status: "PENDING",
     },
   })
 

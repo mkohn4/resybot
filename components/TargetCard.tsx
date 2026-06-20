@@ -30,6 +30,7 @@ type Target = {
 const STATUS_STYLES: Record<string, string> = {
   PENDING: "bg-blue-500/20 text-blue-400",
   SNIPING: "bg-yellow-500/20 text-yellow-400 animate-pulse",
+  WATCHING: "bg-amber-500/20 text-amber-400 animate-pulse",
   BOOKED: "bg-emerald-500/20 text-emerald-400",
   FAILED: "bg-red-500/20 text-red-400",
   CANCELLED: "bg-gray-500/20 text-gray-400",
@@ -38,6 +39,7 @@ const STATUS_STYLES: Record<string, string> = {
 const STATUS_LABELS: Record<string, string> = {
   PENDING: "Pending",
   SNIPING: "Sniping…",
+  WATCHING: "Watching…",
   BOOKED: "Booked!",
   FAILED: "Failed",
   CANCELLED: "Cancelled",
@@ -85,6 +87,15 @@ export function TargetCard({
     await onDelete()
   }
 
+  async function handleStopWatching() {
+    await fetch(`/api/targets/${target.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "CANCELLED" }),
+    })
+    onRefresh()
+  }
+
   async function handleTryNow() {
     setSniping(true)
     setSnipeResult(null)
@@ -120,7 +131,10 @@ export function TargetCard({
           {target.status === "BOOKED" && bookedTime && (
             <p className="text-emerald-400 text-xs font-medium mt-1">Reserved at {bookedTime} ✓</p>
           )}
-          {target.status !== "BOOKED" && (
+          {target.status === "WATCHING" && (
+            <p className="text-amber-400/70 text-xs mt-1">Checking every minute for cancellations until {reservationDate}</p>
+          )}
+          {target.status !== "BOOKED" && target.status !== "WATCHING" && (
             <p className="text-gray-500 text-xs mt-1">Snipes at {snipeDate}</p>
           )}
         </div>
@@ -131,7 +145,15 @@ export function TargetCard({
           >
             {expanded ? "Less" : "Details"}
           </button>
-          {target.status !== "BOOKED" && (
+          {target.status === "WATCHING" && (
+            <button
+              onClick={handleStopWatching}
+              className="text-xs bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 px-2.5 py-1 rounded-lg transition-colors"
+            >
+              Stop
+            </button>
+          )}
+          {target.status !== "BOOKED" && target.status !== "WATCHING" && (
             <button
               onClick={handleTryNow}
               disabled={sniping || target.status === "SNIPING"}

@@ -75,6 +75,7 @@ model ReservationTarget {
   date              DateTime
   partySize         Int          @default(2)
   preferredTimes    String[]
+  mode              TargetMode   @default(SNIPE)
   snipeAt           DateTime
   status            TargetStatus @default(PENDING)
   bookedSlot        String?
@@ -88,9 +89,15 @@ model ReservationTarget {
   attempts          SnipeAttempt[]
 }
 
+enum TargetMode {
+  SNIPE
+  WATCH
+}
+
 enum TargetStatus {
   PENDING
   SNIPING
+  WATCHING
   BOOKED
   FAILED
   CANCELLED

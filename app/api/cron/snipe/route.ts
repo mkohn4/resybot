@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { decrypt } from "@/lib/crypto"
+import { decrypt, encrypt } from "@/lib/crypto"
 import { resyLogin, findSlots, pickBestSlot, bookSlot } from "@/lib/resy"
 import { sendBookingSuccess, sendBookingFailed } from "@/lib/notify"
 
-// Vercel cron calls this — protected by CRON_SECRET header
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization")
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -12,35 +11,43 @@ export async function GET(req: NextRequest) {
   }
 
   const now = new Date()
-  // Find all PENDING targets whose snipeAt window is now (within the last 2 minutes)
   const twoMinsAgo = new Date(now.getTime() - 2 * 60 * 1000)
 
+  // SNIPE targets: fire once when their snipeAt window hits
+  // WATCH targets: poll on every cron tick until booked or date passes
   const targets = await prisma.reservationTarget.findMany({
     where: {
-      status: "PENDING",
-      snipeAt: { gte: twoMinsAgo, lte: now },
+      OR: [
+        { status: "PENDING", mode: "SNIPE", snipeAt: { gte: twoMinsAgo, lte: now } },
+        { status: "WATCHING", mode: "WATCH", date: { gte: now } },
+      ],
     },
     include: { user: { include: { resyCredential: true } } },
   })
 
-  if (targets.length === 0) {
-    return NextResponse.json({ processed: 0 })
-  }
+  // Auto-expire WATCH targets whose date has passed
+  await prisma.reservationTarget.updateMany({
+    where: { mode: "WATCH", status: "WATCHING", date: { lt: now } },
+    data: { status: "FAILED" },
+  })
+
+  if (targets.length === 0) return NextResponse.json({ processed: 0 })
 
   const results = await Promise.allSettled(
-    targets.map((target: typeof targets[number]) => processTarget(target))
+    targets.map((t: typeof targets[number]) => processTarget(t))
   )
 
   const summary = results.map((r: PromiseSettledResult<{ success: boolean; slot?: string; error?: string }>, i: number) => ({
     targetId: targets[i].id,
     restaurant: targets[i].venueName,
+    mode: targets[i].mode,
     result: r.status === "fulfilled" ? r.value : { error: String((r as PromiseRejectedResult).reason) },
   }))
 
   return NextResponse.json({ processed: targets.length, summary })
 }
 
-async function processTarget(target: {
+export type TargetRow = {
   id: string
   userId: string
   venueId: number
@@ -48,9 +55,20 @@ async function processTarget(target: {
   date: Date
   partySize: number
   preferredTimes: string[]
+  mode: string
   notificationEmail: string | null
-  user: { resyCredential: { encryptedEmail: string; encryptedPassword: string; encryptedAuthToken: string | null; paymentMethodId: string | null; tokenExpiresAt: Date | null } | null }
-}) {
+  user: {
+    resyCredential: {
+      encryptedEmail: string
+      encryptedPassword: string
+      encryptedAuthToken: string | null
+      paymentMethodId: string | null
+      tokenExpiresAt: Date | null
+    } | null
+  }
+}
+
+export async function processTarget(target: TargetRow) {
   const cred = target.user.resyCredential
   if (!cred) {
     await prisma.reservationTarget.update({
@@ -60,21 +78,18 @@ async function processTarget(target: {
     throw new Error("No Resy credentials on file")
   }
 
-  // Re-auth if token is missing or expired
+  // Get/refresh auth token
   let authToken: string
   const tokenValid = cred.encryptedAuthToken && cred.tokenExpiresAt && cred.tokenExpiresAt > new Date()
-
   if (tokenValid && cred.encryptedAuthToken) {
     authToken = decrypt(cred.encryptedAuthToken)
   } else {
-    const email = decrypt(cred.encryptedEmail)
-    const password = decrypt(cred.encryptedPassword)
-    const freshAuth = await resyLogin(email, password)
+    const freshAuth = await resyLogin(decrypt(cred.encryptedEmail), decrypt(cred.encryptedPassword))
     authToken = freshAuth.token
     await prisma.resyCredential.update({
       where: { userId: target.userId },
       data: {
-        encryptedAuthToken: (await import("@/lib/crypto")).encrypt(authToken),
+        encryptedAuthToken: encrypt(authToken),
         paymentMethodId: freshAuth.paymentMethodId,
         tokenExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       },
@@ -85,14 +100,16 @@ async function processTarget(target: {
   if (!paymentMethodId) throw new Error("No payment method on file")
 
   const dateStr = target.date.toISOString().split("T")[0]
+  const isWatch = target.mode === "WATCH"
 
+  // Mark as actively trying (SNIPING for one-shot, stay WATCHING for watch mode)
   await prisma.reservationTarget.update({
     where: { id: target.id },
-    data: { status: "SNIPING", lastAttemptAt: new Date() },
+    data: { status: isWatch ? "WATCHING" : "SNIPING", lastAttemptAt: new Date() },
   })
 
-  // Snipe loop: try for 10 seconds
-  const deadline = Date.now() + 10_000
+  // For SNIPE mode: try for 10 seconds. For WATCH mode: single attempt per cron tick.
+  const deadline = isWatch ? Date.now() + 1_000 : Date.now() + 10_000
   let lastError = ""
 
   while (Date.now() < deadline) {
@@ -108,9 +125,7 @@ async function processTarget(target: {
           where: { id: target.id },
           data: { status: "BOOKED", bookedSlot: slot, lastAttemptAt: new Date() },
         })
-        await prisma.snipeAttempt.create({
-          data: { targetId: target.id, success: true, slot },
-        })
+        await prisma.snipeAttempt.create({ data: { targetId: target.id, success: true, slot } })
 
         if (target.notificationEmail) {
           const time = slot.split(" ")[1]?.substring(0, 5) ?? ""
@@ -120,19 +135,27 @@ async function processTarget(target: {
             date: dateStr,
             time,
             partySize: target.partySize,
-          }).catch(() => {}) // don't fail the snipe if email fails
+          }).catch(() => {})
         }
-
         return { success: true, slot }
       }
     } catch (err: unknown) {
       lastError = err instanceof Error ? err.message : String(err)
     }
 
-    await new Promise((r) => setTimeout(r, 500))
+    if (!isWatch) await new Promise((r) => setTimeout(r, 500))
+    else break
   }
 
-  // No slot found
+  // WATCH mode: no slot this tick — stay WATCHING, log attempt silently
+  if (isWatch) {
+    await prisma.snipeAttempt.create({
+      data: { targetId: target.id, success: false, error: "No slots this check" },
+    })
+    return { success: false, watching: true }
+  }
+
+  // SNIPE mode: failed after 10s window
   await prisma.reservationTarget.update({
     where: { id: target.id },
     data: { status: "FAILED", lastAttemptAt: new Date() },
