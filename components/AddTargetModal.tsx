@@ -7,7 +7,7 @@ import { suggestSnipeTime } from "@/lib/restaurants"
 type VenueResult = Restaurant & { source?: "curated" | "resy" }
 
 const PREFERRED_TIMES = ["18:30", "18:45", "19:00", "19:15", "19:30", "19:45", "20:00", "20:15", "20:30", "20:45", "21:00"]
-const DEFAULT_TIMES = ["19:30", "19:45", "20:00", "20:15", "20:30", "20:45", "21:00"]
+const DEFAULT_TIMES = ["20:00", "20:15", "20:30", "19:30", "19:45", "20:45", "21:00"]
 
 type Mode = "scheduled" | "now" | "watch"
 
@@ -68,7 +68,7 @@ export function AddTargetModal({
 
   function toggleTime(t: string) {
     setPreferredTimes((prev) =>
-      prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t].sort()
+      prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]
     )
   }
 

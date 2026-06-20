@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
       cuisine,
       date: new Date(date),
       partySize: Number(partySize ?? 2),
-      preferredTimes: preferredTimes ?? ["19:30", "19:45", "20:00", "20:15", "20:30", "20:45", "21:00"],
+      preferredTimes: preferredTimes ?? ["20:00", "20:15", "20:30", "19:30", "19:45", "20:45", "21:00"],
       snipeAt: new Date(snipeAt),
       mode: isWatch ? "WATCH" : "SNIPE",
       status: isWatch ? "WATCHING" : "PENDING",

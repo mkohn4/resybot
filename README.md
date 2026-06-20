@@ -1,26 +1,37 @@
 # ResyBot
 
-A self-hosted bot that automatically snipes hard-to-get NYC restaurant reservations on [Resy](https://resy.com) the moment they open. Built with Next.js 16, deployed on Vercel with a 1-minute cron job.
+A self-hosted bot that automatically snipes hard-to-get NYC restaurant reservations on [Resy](https://resy.com) the moment they open. Built with Next.js 16, deployed on Vercel with a 1-minute cron job via [cron-job.org](https://cron-job.org).
 
 ## How it works
 
 1. Sign in with Google
 2. Connect your Resy account (credentials are AES-256-GCM encrypted before storage)
-3. Add a restaurant target — search from a curated list of 26 popular NYC spots, or enter any venue ID manually
-4. The snipe time is **auto-suggested** based on each restaurant's known reservation release schedule (e.g. midnight ET, 28 days out for Carbone)
-5. At the scheduled time, the bot wakes up, finds the best available slot in your preferred 6:30–9pm window, books it, and emails you
+3. Add a restaurant target — search from a curated list of 27 popular NYC spots, or enter any venue ID manually
+4. Choose a booking mode:
+   - **Scheduled** — bot wakes at a specific time and snipes when reservations open (snipe time auto-suggested per restaurant)
+   - **Book Now** — immediately checks for available slots and books one right now
+   - **Watch** — polls every minute for cancellations and books the moment one appears
+5. The bot finds the best slot in your preferred time window, books it, and emails you
 
 ## Features
 
 - **Google OAuth** login — no passwords to manage
 - **Encrypted credential storage** — Resy email + password stored with AES-256-GCM, auth token refreshed automatically
-- **Curated NYC restaurant list** — 26 top restaurants pre-loaded with known release times (Carbone, Lilia, Don Angie, 4 Charles, Atomix, Le Bernardin, and more)
+- **Curated NYC restaurant list** — 27 top restaurants pre-loaded with known release times (Carbone, Lilia, Don Angie, 4 Charles, Atomix, Le Bernardin, and more)
 - **Auto-suggested snipe times** — the UI calculates the right moment based on each restaurant's drop schedule
-- **Smart slot selection** — prefers indoor seating, tries times in your priority order, falls back gracefully
+- **Smart slot selection** — prefers indoor seating, tries times in your priority order (8–8:30pm first, then 7:30–9pm), falls back gracefully
 - **10-second snipe window** — polls the Resy API for 10 seconds around the release time for maximum chance of success
+- **Watch mode** — polls every minute for cancellations on fully-booked restaurants
 - **Email notifications** — success or failure emails via Resend (free tier)
 - **Multiple targets** — watch any number of restaurants simultaneously
+- **Venue lookup tool** — search any NYC restaurant by name with a curated sidebar for quick selection
 - **Attempt history** — see every booking attempt per target in the dashboard
+
+## Preferred time priority
+
+Default order: **8:00pm → 8:15pm → 8:30pm → 7:30pm → 7:45pm → 8:45pm → 9:00pm**
+
+Times are tried in the order you select them in the UI. Patio/outside/outdoor seating is always skipped.
 
 ## Tech stack
 
@@ -31,8 +42,9 @@ A self-hosted bot that automatically snipes hard-to-get NYC restaurant reservati
 | Database | Neon Postgres (Prisma 7) |
 | Encryption | Node.js `crypto` — AES-256-GCM |
 | Email | Resend |
-| Scheduling | Vercel Cron (every 1 minute) |
+| Scheduling | cron-job.org (every 1 minute) |
 | Styling | Tailwind CSS |
+| Hosting | Vercel |
 
 ## Curated restaurants
 
@@ -40,15 +52,9 @@ Pre-loaded with release time data for: Carbone, Don Angie, Lilia, 4 Charles Prim
 
 ## Setup
 
-### 1. Prerequisites
+See [SETUP.md](./SETUP.md) for the full step-by-step guide.
 
-- Node.js 20+
-- A [Vercel](https://vercel.com) account
-- A [Neon](https://neon.tech) Postgres database (free tier, available via Vercel Marketplace)
-- A [Google Cloud](https://console.cloud.google.com) project with OAuth 2.0 credentials
-- A [Resend](https://resend.com) account for email (free tier: 3,000 emails/month)
-
-### 2. Clone and install
+### Quick start
 
 ```bash
 git clone https://github.com/mkohn4/resybot.git
@@ -56,17 +62,15 @@ cd resybot
 npm install
 ```
 
-### 3. Generate secrets
+Generate secrets:
 
 ```bash
-openssl rand -hex 32   # use for NEXTAUTH_SECRET
-openssl rand -hex 32   # use for ENCRYPTION_KEY
-openssl rand -hex 16   # use for CRON_SECRET
+openssl rand -hex 32   # NEXTAUTH_SECRET
+openssl rand -hex 32   # ENCRYPTION_KEY
+openssl rand -hex 16   # CRON_SECRET
 ```
 
-### 4. Configure environment
-
-Copy `.env.local` and fill in all values:
+Fill in `.env.local`:
 
 ```env
 DATABASE_URL="postgresql://..."
@@ -80,36 +84,25 @@ ENCRYPTION_KEY="..."   # 64-char hex (32 bytes)
 CRON_SECRET="..."
 ```
 
-Google OAuth redirect URI to add: `https://your-domain.vercel.app/api/auth/callback/google`
-
-### 5. Run migrations
+Run migrations and deploy:
 
 ```bash
 npx prisma migrate dev --name init
-```
-
-### 6. Deploy
-
-```bash
 vercel --prod
 ```
 
-Add all env vars in Vercel → Project → Settings → Environment Variables. The cron job is configured automatically via `vercel.json`.
+### Cron setup (cron-job.org)
 
-### 7. Local development
+Vercel Hobby plan only allows daily crons. Instead, set up a free job at [cron-job.org](https://cron-job.org):
 
-```bash
-npm run dev
-```
+- URL: `https://your-deployment.vercel.app/api/cron/snipe`
+- Method: GET
+- Schedule: every 1 minute
+- Header: `Authorization: Bearer <your CRON_SECRET>`
 
 ## Finding a Venue ID
 
-If a restaurant isn't in the curated list:
-
-1. Go to `resy.com` and navigate to the restaurant
-2. Open browser DevTools → Network tab
-3. Look for a request to `api.resy.com/4/find`
-4. The `venue_id` query parameter is the number you need
+Use the built-in **Venue Lookup** tool in the app (top-right on the dashboard) to search any restaurant by name. For manual lookup: go to `resy.com`, open DevTools → Network, look for a request to `api.resy.com/4/find`, and grab the `venue_id` query parameter.
 
 ## Security notes
 
