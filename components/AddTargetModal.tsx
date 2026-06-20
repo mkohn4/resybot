@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from "react"
 import type { Restaurant } from "@/lib/restaurants"
 import { suggestSnipeTime } from "@/lib/restaurants"
 
+type VenueResult = Restaurant & { source?: "curated" | "resy" }
+
 const PREFERRED_TIMES = ["18:30", "18:45", "19:00", "19:15", "19:30", "19:45", "20:00", "20:15", "20:30", "20:45", "21:00"]
 const DEFAULT_TIMES = ["19:30", "19:45", "20:00", "20:15", "20:30", "20:45", "21:00"]
 
@@ -18,7 +20,7 @@ export function AddTargetModal({
 }) {
   const [mode, setMode] = useState<Mode>("scheduled")
   const [query, setQuery] = useState("")
-  const [results, setResults] = useState<Restaurant[]>([])
+  const [results, setResults] = useState<VenueResult[]>([])
   const [selected, setSelected] = useState<Restaurant | null>(null)
   const [showDropdown, setShowDropdown] = useState(false)
   const [customVenueId, setCustomVenueId] = useState("")
@@ -38,9 +40,9 @@ export function AddTargetModal({
   useEffect(() => {
     if (query.length < 2 || useCustom) { setResults([]); return }
     const timer = setTimeout(async () => {
-      const res = await fetch(`/api/venues/search?q=${encodeURIComponent(query)}`)
+      const res = await fetch(`/api/venues/lookup?q=${encodeURIComponent(query)}`)
       const data = await res.json()
-      setResults(data)
+      setResults(data.results ?? [])
       setShowDropdown(true)
     }, 200)
     return () => clearTimeout(timer)
