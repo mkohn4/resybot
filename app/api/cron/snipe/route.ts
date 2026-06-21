@@ -14,16 +14,17 @@ export async function GET(req: NextRequest) {
     const now = new Date()
     const twoMinsAgo = new Date(now.getTime() - 2 * 60 * 1000)
 
-    // SNIPE targets: fire once when their snipeAt window hits
-    // WATCH targets: poll on every cron tick until booked or date passes
-    const targets = await prisma.reservationTarget.findMany({
-      where: {
-        OR: [
-          { status: "PENDING", mode: "SNIPE", snipeAt: { gte: twoMinsAgo, lte: now } },
-          { status: "WATCHING", mode: "WATCH", date: { gte: now } },
-        ],
-      },
-    })
+    // Neon HTTP adapter doesn't support OR clauses (triggers implicit transactions)
+    // Run two separate queries and merge
+    const [snipeTargets, watchTargets] = await Promise.all([
+      prisma.reservationTarget.findMany({
+        where: { status: "PENDING", mode: "SNIPE", snipeAt: { gte: twoMinsAgo, lte: now } },
+      }),
+      prisma.reservationTarget.findMany({
+        where: { status: "WATCHING", mode: "WATCH", date: { gte: now } },
+      }),
+    ])
+    const targets = [...snipeTargets, ...watchTargets]
 
     // Fetch credentials separately — Neon HTTP adapter doesn't support nested includes
     const userIds = [...new Set(targets.map((t) => t.userId))]
