@@ -57,7 +57,7 @@ export function TargetCard({
   const [expanded, setExpanded] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [sniping, setSniping] = useState(false)
-  const [snipeResult, setSnipeResult] = useState<{ success: boolean; message?: string; slot?: string } | null>(null)
+  const [snipeResult, setSnipeResult] = useState<{ success: boolean; message?: string; slot?: string; fallbackToWatch?: boolean } | null>(null)
 
   const reservationDate = new Date(target.date).toLocaleDateString("en-US", {
     weekday: "short",
@@ -182,6 +182,8 @@ export function TargetCard({
         }`}>
           {snipeResult.success
             ? `Booked! ${snipeResult.slot ? (() => { const t = snipeResult.slot!.split(" ")[1]?.substring(0,5) ?? ""; const [h,m] = t.split(":").map(Number); return `${h>12?h-12:h}:${m.toString().padStart(2,"0")}${h>=12?"pm":"am"}` })() : ""}`
+            : snipeResult.fallbackToWatch
+            ? "No slots now — switched to Watch mode for cancellations"
             : `No slots available: ${snipeResult.message}`
           }
         </div>

@@ -173,16 +173,23 @@ export async function processTarget(target: TargetRow) {
     return { success: false, watching: true }
   }
 
-  // SNIPE mode: failed after 10s window
+  // SNIPE mode: failed after 10s window — auto-fallback to Watch mode
+  const reservationDate = new Date(target.date)
+  const stillFuture = reservationDate > new Date()
+
   await prisma.reservationTarget.update({
     where: { id: target.id },
-    data: { status: "FAILED", lastAttemptAt: new Date() },
+    data: {
+      status: stillFuture ? "WATCHING" : "FAILED",
+      mode: stillFuture ? "WATCH" : "SNIPE",
+      lastAttemptAt: new Date(),
+    },
   })
   await prisma.snipeAttempt.create({
-    data: { targetId: target.id, success: false, error: lastError || "No matching slots found" },
+    data: { targetId: target.id, success: false, error: lastError || "No matching slots at release — watching for cancellations" },
   })
 
-  if (target.notificationEmail) {
+  if (target.notificationEmail && !stillFuture) {
     await sendBookingFailed({
       to: target.notificationEmail,
       restaurantName: target.venueName,
@@ -191,5 +198,5 @@ export async function processTarget(target: TargetRow) {
     }).catch(() => {})
   }
 
-  return { success: false, error: lastError }
+  return { success: false, fallbackToWatch: stillFuture, error: lastError }
 }

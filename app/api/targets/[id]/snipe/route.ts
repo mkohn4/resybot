@@ -59,11 +59,23 @@ export async function POST(
     const best = pickBestSlot(slots, target.preferredTimes, dateStr)
 
     if (!best) {
-      await prisma.reservationTarget.update({ where: { id }, data: { status: "PENDING" } })
+      const stillFuture = new Date(target.date) > new Date()
+      await prisma.reservationTarget.update({
+        where: { id },
+        data: stillFuture
+          ? { status: "WATCHING", mode: "WATCH" }
+          : { status: "PENDING" },
+      })
       await prisma.snipeAttempt.create({
         data: { targetId: id, success: false, error: "No matching slots available right now" },
       })
-      return NextResponse.json({ success: false, message: "No matching slots available right now" })
+      return NextResponse.json({
+        success: false,
+        fallbackToWatch: stillFuture,
+        message: stillFuture
+          ? "No slots right now — switched to Watch mode for cancellations"
+          : "No matching slots available right now",
+      })
     }
 
     await bookSlot(authToken, paymentMethodId, best.config.token, dateStr, target.partySize)

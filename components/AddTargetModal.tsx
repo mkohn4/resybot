@@ -34,7 +34,7 @@ export function AddTargetModal({
   const [notificationEmail, setNotificationEmail] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-  const [nowResult, setNowResult] = useState<{ success: boolean; message?: string; slot?: string } | null>(null)
+  const [nowResult, setNowResult] = useState<{ success: boolean; message?: string; slot?: string; fallbackToWatch?: boolean } | null>(null)
   const searchRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -164,6 +164,13 @@ export function AddTargetModal({
                 </p>
               )}
               <p className="text-gray-500 text-xs mt-3">Check your Resy app for confirmation details</p>
+            </>
+          ) : nowResult.fallbackToWatch ? (
+            <>
+              <div className="text-5xl mb-4">👀</div>
+              <h2 className="text-xl font-bold text-white mb-2">No slots right now</h2>
+              <p className="text-gray-400 text-sm">{nowResult.message}</p>
+              <p className="text-amber-400/70 text-xs mt-3">Switched to Watch mode — the bot will check every minute for cancellations</p>
             </>
           ) : (
             <>
