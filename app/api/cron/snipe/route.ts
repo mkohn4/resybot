@@ -10,52 +10,58 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const now = new Date()
-  const twoMinsAgo = new Date(now.getTime() - 2 * 60 * 1000)
+  try {
+    const now = new Date()
+    const twoMinsAgo = new Date(now.getTime() - 2 * 60 * 1000)
 
-  // SNIPE targets: fire once when their snipeAt window hits
-  // WATCH targets: poll on every cron tick until booked or date passes
-  const targets = await prisma.reservationTarget.findMany({
-    where: {
-      OR: [
-        { status: "PENDING", mode: "SNIPE", snipeAt: { gte: twoMinsAgo, lte: now } },
-        { status: "WATCHING", mode: "WATCH", date: { gte: now } },
-      ],
-    },
-  })
+    // SNIPE targets: fire once when their snipeAt window hits
+    // WATCH targets: poll on every cron tick until booked or date passes
+    const targets = await prisma.reservationTarget.findMany({
+      where: {
+        OR: [
+          { status: "PENDING", mode: "SNIPE", snipeAt: { gte: twoMinsAgo, lte: now } },
+          { status: "WATCHING", mode: "WATCH", date: { gte: now } },
+        ],
+      },
+    })
 
-  // Fetch credentials separately — Neon HTTP adapter doesn't support nested includes
-  const userIds = [...new Set(targets.map((t) => t.userId))]
-  const credentials = await prisma.resyCredential.findMany({
-    where: { userId: { in: userIds } },
-  })
-  const credsByUserId = Object.fromEntries(credentials.map((c) => [c.userId, c]))
+    // Fetch credentials separately — Neon HTTP adapter doesn't support nested includes
+    const userIds = [...new Set(targets.map((t) => t.userId))]
+    const credentials = userIds.length > 0
+      ? await prisma.resyCredential.findMany({ where: { userId: { in: userIds } } })
+      : []
+    const credsByUserId = Object.fromEntries(credentials.map((c) => [c.userId, c]))
 
-  const targetsWithCreds = targets.map((t) => ({
-    ...t,
-    user: { resyCredential: credsByUserId[t.userId] ?? null },
-  }))
+    const targetsWithCreds = targets.map((t) => ({
+      ...t,
+      user: { resyCredential: credsByUserId[t.userId] ?? null },
+    }))
 
-  // Auto-expire WATCH targets whose date has passed
-  await prisma.reservationTarget.updateMany({
-    where: { mode: "WATCH", status: "WATCHING", date: { lt: now } },
-    data: { status: "FAILED" },
-  })
+    // Auto-expire WATCH targets whose date has passed
+    await prisma.reservationTarget.updateMany({
+      where: { mode: "WATCH", status: "WATCHING", date: { lt: now } },
+      data: { status: "FAILED" },
+    })
 
-  if (targetsWithCreds.length === 0) return NextResponse.json({ processed: 0 })
+    if (targetsWithCreds.length === 0) return NextResponse.json({ processed: 0 })
 
-  const results = await Promise.allSettled(
-    targetsWithCreds.map((t) => processTarget(t))
-  )
+    const results = await Promise.allSettled(
+      targetsWithCreds.map((t) => processTarget(t))
+    )
 
-  const summary = results.map((r: PromiseSettledResult<{ success: boolean; slot?: string; error?: string }>, i: number) => ({
-    targetId: targetsWithCreds[i].id,
-    restaurant: targetsWithCreds[i].venueName,
-    mode: targetsWithCreds[i].mode,
-    result: r.status === "fulfilled" ? r.value : { error: String((r as PromiseRejectedResult).reason) },
-  }))
+    const summary = results.map((r: PromiseSettledResult<{ success: boolean; slot?: string; error?: string }>, i: number) => ({
+      targetId: targetsWithCreds[i].id,
+      restaurant: targetsWithCreds[i].venueName,
+      mode: targetsWithCreds[i].mode,
+      result: r.status === "fulfilled" ? r.value : { error: String((r as PromiseRejectedResult).reason) },
+    }))
 
-  return NextResponse.json({ processed: targets.length, summary })
+    return NextResponse.json({ processed: targets.length, summary })
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error("Cron handler error:", message)
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
 }
 
 export type TargetRow = {
