@@ -1,5 +1,9 @@
 import { PrismaClient } from "@prisma/client"
-import { PrismaNeonHttp } from "@prisma/adapter-neon"
+import { PrismaNeon } from "@prisma/adapter-neon"
+import { neonConfig } from "@neondatabase/serverless"
+import ws from "ws"
+
+neonConfig.webSocketConstructor = ws
 
 declare global {
   // eslint-disable-next-line no-var
@@ -16,7 +20,7 @@ function createPrismaClient(): PrismaClient {
     })
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const adapter = new PrismaNeonHttp(url, {} as any)
+  const adapter = new PrismaNeon({ connectionString: url } as any)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return new PrismaClient({ adapter } as any)
 }
