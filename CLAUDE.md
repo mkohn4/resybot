@@ -47,6 +47,10 @@ Default order (8–8:30pm first, then 7:30–9pm):
 
 Times are tried in array order — **NO automatic sort**. The UI preserves click order. Patio/outside/outdoor table types are always skipped. Fallback: first non-patio slot in the 6:30pm–9pm window.
 
+## Watch mode expiry
+
+Watch targets stop at **noon on the reservation date**. The `date` field is stored as `YYYY-MM-DDT12:00:00` (noon local). The cron only picks up targets where `date >= now`, and auto-expires (marks FAILED) where `date < now`. This gives you the morning of the reservation to make other plans if the bot didn't find anything.
+
 ## Auto-fallback behavior
 
 When a SNIPE target misses (no slots found in the 10s window), the cron handler automatically switches it to `mode=WATCH, status=WATCHING` if the reservation date is still in the future. Same applies to on-demand Try Now/Book Now snipes. Only marks FAILED if the reservation date has passed.
