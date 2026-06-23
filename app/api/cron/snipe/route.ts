@@ -44,14 +44,16 @@ export async function GET(req: NextRequest) {
       data: { status: "FAILED" },
     })
 
-    // Delete BOOKED and FAILED/CANCELLED targets more than 7 days after their reservation date
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-    await prisma.reservationTarget.deleteMany({
-      where: {
-        status: { in: ["BOOKED", "FAILED", "CANCELLED"] },
-        date: { lt: sevenDaysAgo },
-      },
-    })
+    // Delete old BOOKED/FAILED/CANCELLED targets once per day (at the first cron tick of each hour 0)
+    if (now.getUTCHours() === 0 && now.getUTCMinutes() < 2) {
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+      await prisma.reservationTarget.deleteMany({
+        where: {
+          status: { in: ["BOOKED", "FAILED", "CANCELLED"] },
+          date: { lt: sevenDaysAgo },
+        },
+      })
+    }
 
     if (targetsWithCreds.length === 0) return NextResponse.json({ processed: 0 })
 
