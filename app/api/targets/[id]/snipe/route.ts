@@ -101,7 +101,11 @@ export async function POST(
     return NextResponse.json({ success: true, slot, time })
   } catch (err: unknown) {
     const error = err instanceof Error ? err.message : String(err)
-    await prisma.reservationTarget.update({ where: { id }, data: { status: "PENDING" } })
+    const stillFuture = new Date(target.date) > new Date()
+    await prisma.reservationTarget.update({
+      where: { id },
+      data: stillFuture ? { status: "WATCHING", mode: "WATCH" } : { status: "FAILED" },
+    })
     await prisma.snipeAttempt.create({ data: { targetId: id, success: false, error } })
 
     if (target.notificationEmail) {
