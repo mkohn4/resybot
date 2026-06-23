@@ -63,26 +63,26 @@ export function DashboardClient({ user, initialTargets, hasCredentials }: Props)
             <h1 className="text-xl font-bold text-white tracking-tight">ResyBot</h1>
             <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-medium">NYC</span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 sm:gap-3">
             {user.image && (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={user.image} alt={user.name} className="w-8 h-8 rounded-full" />
             )}
             <button
               onClick={() => setShowCredModal(true)}
-              className="text-sm text-gray-400 hover:text-white transition-colors"
+              className="text-sm text-gray-400 hover:text-white transition-colors py-2 px-2"
             >
               {credsSaved ? "Resy ✓" : "Connect Resy"}
             </button>
             <Link
               href="/dashboard/lookup"
-              className="text-sm text-gray-400 hover:text-white transition-colors"
+              className="text-sm text-gray-400 hover:text-white transition-colors py-2 px-2"
             >
-              Venue Lookup
+              Lookup
             </Link>
             <button
               onClick={() => signOut({ callbackUrl: "/login" })}
-              className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
+              className="text-sm text-gray-500 hover:text-gray-300 transition-colors py-2 px-2"
             >
               Sign out
             </button>
@@ -93,7 +93,7 @@ export function DashboardClient({ user, initialTargets, hasCredentials }: Props)
       <main className="max-w-5xl mx-auto px-4 py-8">
         {/* Credential warning */}
         {!credsSaved && (
-          <div className="mb-6 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-center justify-between">
+          <div className="mb-6 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-amber-400 font-medium text-sm">Connect your Resy account to start sniping</p>
               <p className="text-amber-400/70 text-xs mt-0.5">Your credentials are encrypted and stored securely</p>
@@ -108,16 +108,16 @@ export function DashboardClient({ user, initialTargets, hasCredentials }: Props)
         )}
 
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-4 mb-8">
-          <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+        <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-8">
+          <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800">
             <p className="text-gray-400 text-xs uppercase tracking-wider mb-1">Active</p>
             <p className="text-2xl font-bold text-white">{pendingCount}</p>
           </div>
-          <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+          <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800">
             <p className="text-gray-400 text-xs uppercase tracking-wider mb-1">Booked</p>
             <p className="text-2xl font-bold text-emerald-400">{bookedCount}</p>
           </div>
-          <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+          <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800">
             <p className="text-gray-400 text-xs uppercase tracking-wider mb-1">Total</p>
             <p className="text-2xl font-bold text-white">{targets.length}</p>
           </div>
@@ -129,7 +129,7 @@ export function DashboardClient({ user, initialTargets, hasCredentials }: Props)
           <button
             onClick={() => setShowAddModal(true)}
             disabled={!credsSaved}
-            className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-sm px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+            className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-sm px-4 py-2.5 rounded-lg transition-colors flex items-center gap-2"
           >
             <span className="text-lg leading-none">+</span> Add Target
           </button>

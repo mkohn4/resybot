@@ -148,8 +148,8 @@ export function AddTargetModal({
   // If "now" mode succeeded/failed, show result instead of form
   if (nowResult) {
     return (
-      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div className="bg-gray-900 rounded-2xl border border-gray-800 p-8 w-full max-w-md shadow-2xl text-center">
+      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-start justify-center p-4 overflow-y-auto">
+        <div className="bg-gray-900 rounded-2xl border border-gray-800 p-8 w-full max-w-md shadow-2xl text-center my-4">
           {nowResult.success ? (
             <>
               <div className="text-5xl mb-4">🎉</div>
@@ -195,7 +195,7 @@ export function AddTargetModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-start justify-center p-4 overflow-y-auto">
       <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6 w-full max-w-lg shadow-2xl my-4">
         <h2 className="text-lg font-bold text-white mb-5">Add Reservation Target</h2>
 
@@ -203,7 +203,7 @@ export function AddTargetModal({
         <div className="flex gap-1 mb-5 bg-gray-800 p-1 rounded-xl">
           <button
             onClick={() => setMode("scheduled")}
-            className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
+            className={`flex-1 py-3 rounded-lg text-xs font-medium transition-colors ${
               mode === "scheduled" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-gray-200"
             }`}
           >
@@ -211,7 +211,7 @@ export function AddTargetModal({
           </button>
           <button
             onClick={() => setMode("now")}
-            className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
+            className={`flex-1 py-3 rounded-lg text-xs font-medium transition-colors ${
               mode === "now" ? "bg-emerald-600 text-white" : "text-gray-400 hover:text-gray-200"
             }`}
           >
@@ -219,7 +219,7 @@ export function AddTargetModal({
           </button>
           <button
             onClick={() => setMode("watch")}
-            className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
+            className={`flex-1 py-3 rounded-lg text-xs font-medium transition-colors ${
               mode === "watch" ? "bg-amber-600 text-white" : "text-gray-400 hover:text-gray-200"
             }`}
           >
@@ -293,7 +293,7 @@ export function AddTargetModal({
           )}
           <button
             onClick={() => { setUseCustom(!useCustom); setSelected(null); setQuery(""); setCustomVenueId(""); setCustomName("") }}
-            className="text-xs text-emerald-400 hover:text-emerald-300 mt-2 transition-colors"
+            className="text-xs text-emerald-400 hover:text-emerald-300 mt-2 transition-colors py-2 block"
           >
             {useCustom ? "← Search curated list" : "Enter venue ID manually →"}
           </button>
@@ -326,7 +326,7 @@ export function AddTargetModal({
               <button
                 key={n}
                 onClick={() => setPartySize(n)}
-                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`flex-1 py-3 rounded-lg text-sm font-medium transition-colors ${
                   partySize === n ? "bg-emerald-600 text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
                 }`}
               >
@@ -347,7 +347,7 @@ export function AddTargetModal({
                 <button
                   key={t}
                   onClick={() => toggleTime(t)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  className={`px-3 py-2.5 rounded-lg text-xs font-medium transition-colors ${
                     preferredTimes.includes(t) ? "bg-emerald-600 text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
                   }`}
                 >

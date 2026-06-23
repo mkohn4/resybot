@@ -5,7 +5,7 @@ import { signIn } from "next-auth/react"
 export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-950">
-      <div className="bg-gray-900 rounded-2xl p-10 flex flex-col items-center gap-6 shadow-2xl border border-gray-800 w-full max-w-sm">
+      <div className="bg-gray-900 rounded-2xl p-8 sm:p-10 flex flex-col items-center gap-6 shadow-2xl border border-gray-800 w-full max-w-sm mx-4">
         <div className="text-center">
           <h1 className="text-3xl font-bold text-white tracking-tight">ResyBot</h1>
           <p className="text-gray-400 mt-2 text-sm">Auto-snipe NYC restaurant reservations</p>

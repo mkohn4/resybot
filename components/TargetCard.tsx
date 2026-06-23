@@ -141,7 +141,7 @@ export function TargetCard({
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => setExpanded(!expanded)}
-            className="text-gray-500 hover:text-gray-300 transition-colors text-xs"
+            className="text-gray-500 hover:text-gray-300 transition-colors text-xs py-1.5 px-2"
           >
             {expanded ? "Less" : "Details"}
           </button>
@@ -166,7 +166,7 @@ export function TargetCard({
             <button
               onClick={handleDelete}
               disabled={deleting}
-              className="text-gray-600 hover:text-red-400 transition-colors text-xs"
+              className="text-gray-600 hover:text-red-400 transition-colors text-xs py-1.5 px-2"
             >
               Remove
             </button>
@@ -215,7 +215,7 @@ export function TargetCard({
                     <span className="text-gray-400">
                       {new Date(a.attemptAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
                     </span>
-                    {a.error && <span className="text-red-400 truncate">{a.error}</span>}
+                    {a.error && <span className="text-red-400 break-words line-clamp-2">{a.error}</span>}
                     {a.slot && <span className="text-emerald-400">{a.slot}</span>}
                   </div>
                 ))}

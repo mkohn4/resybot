@@ -160,7 +160,7 @@ export function VenueLookup() {
                         <>
                           <p className="text-gray-500 text-xs mb-1">Venue ID</p>
                           <div className="flex items-center gap-2 justify-end">
-                            <code className="text-emerald-400 font-mono font-bold text-xl">
+                            <code className="text-emerald-400 font-mono font-bold text-base">
                               {r.venueId}
                             </code>
                             <button
