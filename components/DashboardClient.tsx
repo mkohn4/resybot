@@ -47,8 +47,12 @@ export function DashboardClient({ user, initialTargets, hasCredentials }: Props)
     setTargets((prev) => prev.filter((t) => t.id !== id))
   }
 
-  const pendingCount = targets.filter((t) => t.status === "PENDING").length
-  const bookedCount = targets.filter((t) => t.status === "BOOKED").length
+  const [bookedCollapsed, setBookedCollapsed] = useState(false)
+
+  const activeTargets = targets.filter((t) => t.status !== "BOOKED")
+  const bookedTargets = targets.filter((t) => t.status === "BOOKED")
+  const pendingCount = targets.filter((t) => ["PENDING", "SNIPING", "WATCHING"].includes(t.status)).length
+  const bookedCount = bookedTargets.length
 
   return (
     <div className="min-h-screen bg-gray-950">
@@ -131,8 +135,8 @@ export function DashboardClient({ user, initialTargets, hasCredentials }: Props)
           </button>
         </div>
 
-        {/* Target list */}
-        {targets.length === 0 ? (
+        {/* Active targets */}
+        {activeTargets.length === 0 && bookedTargets.length === 0 ? (
           <div className="text-center py-20 text-gray-600">
             <p className="text-4xl mb-3">🍽️</p>
             <p className="text-lg font-medium text-gray-400">No targets yet</p>
@@ -140,9 +144,32 @@ export function DashboardClient({ user, initialTargets, hasCredentials }: Props)
           </div>
         ) : (
           <div className="space-y-3">
-            {targets.map((t) => (
+            {activeTargets.map((t) => (
               <TargetCard key={t.id} target={t} onDelete={() => deleteTarget(t.id)} onRefresh={refreshTargets} />
             ))}
+          </div>
+        )}
+
+        {/* Booked section */}
+        {bookedTargets.length > 0 && (
+          <div className="mt-8">
+            <button
+              onClick={() => setBookedCollapsed(!bookedCollapsed)}
+              className="flex items-center gap-2 text-sm font-semibold text-gray-400 hover:text-white transition-colors mb-3 group"
+            >
+              <span className={`transition-transform duration-200 ${bookedCollapsed ? "-rotate-90" : ""}`}>▾</span>
+              <span>Booked</span>
+              <span className="bg-emerald-500/20 text-emerald-400 text-xs px-2 py-0.5 rounded-full font-medium">
+                {bookedTargets.length}
+              </span>
+            </button>
+            {!bookedCollapsed && (
+              <div className="space-y-3">
+                {bookedTargets.map((t) => (
+                  <TargetCard key={t.id} target={t} onDelete={() => deleteTarget(t.id)} onRefresh={refreshTargets} />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </main>
