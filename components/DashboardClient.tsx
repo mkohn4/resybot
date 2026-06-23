@@ -48,10 +48,12 @@ export function DashboardClient({ user, initialTargets, hasCredentials }: Props)
   }
 
   const [bookedCollapsed, setBookedCollapsed] = useState(false)
+  const [expiredCollapsed, setExpiredCollapsed] = useState(true)
 
-  const activeTargets = targets.filter((t) => t.status !== "BOOKED")
+  const activeTargets = targets.filter((t) => ["PENDING", "SNIPING", "WATCHING"].includes(t.status))
   const bookedTargets = targets.filter((t) => t.status === "BOOKED")
-  const pendingCount = targets.filter((t) => ["PENDING", "SNIPING", "WATCHING"].includes(t.status)).length
+  const expiredTargets = targets.filter((t) => ["FAILED", "CANCELLED"].includes(t.status))
+  const pendingCount = activeTargets.length
   const bookedCount = bookedTargets.length
 
   return (
@@ -136,7 +138,7 @@ export function DashboardClient({ user, initialTargets, hasCredentials }: Props)
         </div>
 
         {/* Active targets */}
-        {activeTargets.length === 0 && bookedTargets.length === 0 ? (
+        {activeTargets.length === 0 && bookedTargets.length === 0 && expiredTargets.length === 0 ? (
           <div className="text-center py-20 text-gray-600">
             <p className="text-4xl mb-3">🍽️</p>
             <p className="text-lg font-medium text-gray-400">No targets yet</p>
@@ -147,6 +149,29 @@ export function DashboardClient({ user, initialTargets, hasCredentials }: Props)
             {activeTargets.map((t) => (
               <TargetCard key={t.id} target={t} onDelete={() => deleteTarget(t.id)} onRefresh={refreshTargets} />
             ))}
+          </div>
+        )}
+
+        {/* Expired / failed section */}
+        {expiredTargets.length > 0 && (
+          <div className="mt-8">
+            <button
+              onClick={() => setExpiredCollapsed(!expiredCollapsed)}
+              className="flex items-center gap-2 text-sm font-semibold text-gray-400 hover:text-white transition-colors mb-3"
+            >
+              <span className={`transition-transform duration-200 ${expiredCollapsed ? "-rotate-90" : ""}`}>▾</span>
+              <span>Expired</span>
+              <span className="bg-gray-500/20 text-gray-400 text-xs px-2 py-0.5 rounded-full font-medium">
+                {expiredTargets.length}
+              </span>
+            </button>
+            {!expiredCollapsed && (
+              <div className="space-y-3">
+                {expiredTargets.map((t) => (
+                  <TargetCard key={t.id} target={t} onDelete={() => deleteTarget(t.id)} onRefresh={refreshTargets} />
+                ))}
+              </div>
+            )}
           </div>
         )}
 

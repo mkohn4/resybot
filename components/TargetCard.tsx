@@ -41,7 +41,7 @@ const STATUS_LABELS: Record<string, string> = {
   SNIPING: "Sniping…",
   WATCHING: "Watching…",
   BOOKED: "Booked!",
-  FAILED: "Failed",
+  FAILED: "Expired",
   CANCELLED: "Cancelled",
 }
 
