@@ -36,8 +36,10 @@ export function AddTargetModal({
   const [error, setError] = useState("")
   const [nowResult, setNowResult] = useState<{ success: boolean; message?: string; slot?: string; fallbackToWatch?: boolean } | null>(null)
   const searchRef = useRef<HTMLDivElement>(null)
+  const suppressSearch = useRef(false)
 
   useEffect(() => {
+    if (suppressSearch.current) { suppressSearch.current = false; return }
     if (query.length < 2 || useCustom) { setResults([]); return }
     const timer = setTimeout(async () => {
       const res = await fetch(`/api/venues/lookup?q=${encodeURIComponent(query)}`)
@@ -60,6 +62,7 @@ export function AddTargetModal({
   }, [date, selected])
 
   function selectRestaurant(r: Restaurant) {
+    suppressSearch.current = true
     setSelected(r)
     setQuery(r.name)
     setShowDropdown(false)
