@@ -100,4 +100,14 @@ Full plan saved in memory (`project_opentable_plan.md`). Phased build:
 5. **Cron routing** — `target.platform === "OPENTABLE" ? otFindSlots : resyFindSlots`
 6. **Venue lookup** — OpenTable search tab
 
-**Blocker before starting:** Extract OpenTable `client_id`/`client_secret` by intercepting OpenTable mobile app traffic with mitmproxy.
+**Blocker before starting:** Extract OpenTable `client_id`/`client_secret` by intercepting OpenTable mobile app traffic with mitmproxy (jailbroken iPhone + SSL Kill Switch 2 is easiest).
+
+## Planned: SevenRooms support (Phase 3)
+
+Full plan in memory (`project_sevenrooms_plan.md`). After Resy + OpenTable.
+
+- No consumer login — widget-based per restaurant
+- `venue_group_client_id` extractable from DevTools (no mitmproxy needed)
+- **Blocked by Cloudflare** — requires Playwright headless browser, not raw fetch
+- Poll every 30–60s (slower than Resy)
+- Most SevenRooms restaurants are also on Resy, so lower urgency
