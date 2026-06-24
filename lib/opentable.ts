@@ -1,17 +1,21 @@
 const DAPI_BASE = "https://www.opentable.com/dapi"
 const GQL_URL = "https://www.opentable.com/dapi/fe/gql"
 
-// Static CSRF token — confirmed working across multiple open-source repos
-const CSRF_TOKEN = "2b167092-25e4-4f0d-a4a5-6f51e18d24e3"
-
-const BASE_HEADERS = {
-  "content-type": "application/json",
-  accept: "*/*",
-  origin: "https://www.opentable.com",
-  referer: "https://www.opentable.com/",
-  "x-csrf-token": CSRF_TOKEN,
-  "user-agent":
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+function makeHeaders() {
+  // OT uses double-submit CSRF: token must match the session cookie.
+  // Server-side we have no session cookie, so generate a fresh UUID each request
+  // to avoid 409 Conflict from a stale token referencing a dead session.
+  const csrf = crypto.randomUUID()
+  return {
+    "content-type": "application/json",
+    accept: "*/*",
+    origin: "https://www.opentable.com",
+    referer: "https://www.opentable.com/",
+    "x-csrf-token": csrf,
+    cookie: `OT-SessionId=${crypto.randomUUID()}`,
+    "user-agent":
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+  }
 }
 
 export type OTSlot = {
@@ -35,7 +39,7 @@ export async function findOTSlots(
 ): Promise<OTSlot[]> {
   const res = await fetch(`${GQL_URL}?optype=query&opname=RestaurantsAvailability`, {
     method: "POST",
-    headers: BASE_HEADERS,
+    headers: makeHeaders(),
     body: JSON.stringify({
       operationName: "RestaurantsAvailability",
       variables: {
@@ -119,7 +123,7 @@ export async function bookOTSlot(
 ): Promise<{ reservationId: string }> {
   const res = await fetch(`${DAPI_BASE}/booking/make-reservation`, {
     method: "POST",
-    headers: BASE_HEADERS,
+    headers: makeHeaders(),
     body: JSON.stringify({
       restaurantId,
       slotAvailabilityToken: slot.slotAvailabilityToken,
@@ -162,7 +166,7 @@ export async function searchOTVenues(query: string): Promise<{
 }[]> {
   const res = await fetch(`${GQL_URL}?optype=query&opname=Autocomplete`, {
     method: "POST",
-    headers: BASE_HEADERS,
+    headers: makeHeaders(),
     body: JSON.stringify({
       operationName: "Autocomplete",
       variables: {
