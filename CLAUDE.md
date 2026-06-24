@@ -4,10 +4,10 @@
 
 ## Project overview
 
-Self-hosted NYC restaurant reservation sniper. Users sign in with Google, store their Resy credentials (AES-256-GCM encrypted), and configure targets. A 1-minute cron (cron-job.org) fires `GET /api/cron/snipe`.
+Self-hosted NYC restaurant reservation sniper. Users sign in with Google, store their Resy credentials (AES-256-GCM encrypted) and OpenTable bearer token (AES-256-GCM encrypted). A 1-minute cron (cron-job.org) fires `GET /api/cron/snipe`.
 
-**Three booking modes:**
-- **SNIPE** — fires once at scheduled `snipeAt` time, polls the Resy API for 10 seconds. On miss, auto-falls back to WATCH mode instead of marking FAILED.
+**Three booking modes (both Resy and OpenTable):**
+- **SNIPE** — fires once at scheduled `snipeAt` time, polls the API for 10 seconds. On miss, auto-falls back to WATCH mode instead of marking FAILED.
 - **WATCH** — polls every cron tick for cancellations, stays WATCHING until booked or date passes.
 - **Book Now** — immediate on-demand snipe via `POST /api/targets/[id]/snipe`. On miss, also auto-falls back to WATCH.
 
@@ -40,6 +40,30 @@ Self-hosted NYC restaurant reservation sniper. Users sign in with Google, store 
 - Book: `POST /3/book`
 - Venue search: `POST /3/venuesearch/search`
 
+## OpenTable API (mobile API — fully working)
+
+Base: `https://mobile-api.opentable.com`
+Auth: Bearer token extracted from iOS app via Proxyman HAR capture (no client_id/secret needed)
+
+**Critical implementation details:**
+- Slots are at `data.availability.availability.timeslots` — NOT `data.suggestedAvailability` (which is always empty)
+- The `availabilityToken` query param MUST be set to `eyJ2IjozLCJtIjowLCJwIjowLCJzIjowLCJuIjowfQ` (base64 of `{"v":3,"m":0,"p":0,"s":0,"n":0}`) — without it, the API returns 0 slots
+- The `diningAreaId` in lock/book must come from `slot.diningAreas[0].id` (real ID like `"100618"`), NOT hardcoded `"1"` — using `"1"` causes `NOT_AVAILABLE` from the lock endpoint
+- Some restaurants require a credit card hold (`requiresCreditCard: true, creditCardPolicyType: "HOLD"`) — booking those requires a Stripe card token, which we don't currently support; the bot skips them gracefully
+- Two-step booking: lock slot → POST reservation (lock expires after ~30s)
+- User profile (gpid, customerId, phone) fetched automatically during OT onboarding via `GET /api/v3/user/`
+
+**Endpoints in use:**
+- User profile: `GET /api/v3/user/?loadInvitations=0`
+- Availability: `GET /api/v3/restaurant/{id}?dateTime=...&partySize=...&availabilityToken=...&allowPop=true&partnerId=84&...`
+- Lock: `POST /api/v1/reservation/{restaurantId}/lock`
+- Book: `POST /api/v3/reservation/{restaurantId}`
+- Search: `PUT /api/v4/personalize/autocompleteInterspersed`
+
+**OT onboarding flow:** User pastes bearer token into OTProfileModal → app calls `POST /api/ot-profile` → fetches `GET /api/v3/user/` → stores encrypted bearer + gpid + customerId + phone in `OTGuestProfile`
+
+**Bearer token expiry:** Unknown — likely long-lived (weeks/months). If booking starts failing with 401, user must re-paste a fresh token from Proxyman.
+
 ## Preferred time priority
 
 Default order (8–8:30pm first, then 7:30–9pm):
@@ -60,6 +84,7 @@ When a SNIPE target misses (no slots found in the 10s window), the cron handler 
 ```
 TargetMode:   SNIPE | WATCH
 TargetStatus: PENDING | SNIPING | WATCHING | BOOKED | FAILED | CANCELLED
+Platform:     RESY | OPENTABLE
 ```
 
 ## Important files
@@ -67,20 +92,23 @@ TargetStatus: PENDING | SNIPING | WATCHING | BOOKED | FAILED | CANCELLED
 | File | Purpose |
 |---|---|
 | `lib/resy.ts` | Resy API client — login, findSlots, pickBestSlot, bookSlot |
+| `lib/opentable.ts` | OpenTable mobile API client — findOTSlots, pickBestOTSlot, bookOTSlot, searchOTVenues |
 | `lib/db.ts` | Prisma client with PrismaNeon WebSocket adapter |
 | `lib/crypto.ts` | AES-256-GCM encrypt/decrypt |
 | `lib/restaurants.ts` | 27 curated NYC restaurants + `suggestSnipeTime()` |
 | `lib/notify.ts` | Lazy Resend email notifications |
 | `lib/auth.ts` | NextAuth v5 config |
-| `app/api/cron/snipe/route.ts` | Cron handler — processes SNIPE + WATCH targets, auto-fallback logic |
-| `app/api/targets/[id]/snipe/route.ts` | On-demand immediate snipe with auto-fallback |
-| `app/api/venues/lookup/route.ts` | Venue search (curated list + Resy `/3/venuesearch/search`) |
-| `components/AddTargetModal.tsx` | Add target UI — Scheduled / Book Now / Watch modes |
+| `app/api/cron/snipe/route.ts` | Cron handler — processes SNIPE + WATCH targets for both platforms, auto-fallback |
+| `app/api/targets/[id]/snipe/route.ts` | On-demand immediate snipe with auto-fallback (Resy + OT) |
+| `app/api/venues/lookup/route.ts` | Venue search — curated list + Resy live search + OT mobile autocomplete |
+| `app/api/ot-profile/route.ts` | GET/POST OT profile — stores encrypted bearer token, fetches profile from OT API |
+| `components/AddTargetModal.tsx` | Add target UI — Scheduled / Book Now / Watch modes, auto-detects Resy vs OT |
 | `components/TargetCard.tsx` | Dashboard card — Try Now, Stop, fallback messaging |
+| `components/OTProfileModal.tsx` | OT onboarding — paste bearer token, displays fetched name as confirmation |
 | `components/VenueLookup.tsx` | Venue lookup tool with curated sidebar |
 | `proxy.ts` | Next.js 16 auth proxy (formerly middleware.ts) |
 | `prisma.config.ts` | Loads `.env.local` for Prisma CLI commands |
-| `prisma/schema.prisma` | DB schema — User, ResyCredential, ReservationTarget, SnipeAttempt |
+| `prisma/schema.prisma` | DB schema — User, ResyCredential, OTGuestProfile, ReservationTarget, SnipeAttempt |
 
 ## Cron setup (cron-job.org)
 
@@ -88,19 +116,6 @@ URL: `https://resybot.vercel.app/api/cron/snipe`
 Method: GET
 Schedule: every 1 minute
 Header: `Authorization: Bearer <CRON_SECRET>`
-
-## Planned: OpenTable support
-
-Full plan saved in memory (`project_opentable_plan.md`). Phased build:
-
-1. **Schema** — add `Platform` enum (RESY/OPENTABLE) to `ReservationTarget`, new `OpenTableCredential` model
-2. **`lib/opentable.ts`** — mirrors `lib/resy.ts`; needs `client_id`/`client_secret` extracted from OpenTable mobile app via mitmproxy first
-3. **Credential UI** — Connect Resy / Connect OpenTable tabs
-4. **Modal platform toggle** — [Resy][OpenTable] pill at top of AddTargetModal
-5. **Cron routing** — `target.platform === "OPENTABLE" ? otFindSlots : resyFindSlots`
-6. **Venue lookup** — OpenTable search tab
-
-**Blocker before starting:** Extract OpenTable `client_id`/`client_secret` by intercepting OpenTable mobile app traffic with mitmproxy (jailbroken iPhone + SSL Kill Switch 2 is easiest).
 
 ## Planned: SevenRooms support (Phase 3)
 

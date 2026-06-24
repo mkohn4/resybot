@@ -1,5 +1,4 @@
 const MOBILE_BASE = "https://mobile-api.opentable.com"
-const GQL_URL = "https://www.opentable.com/dapi/fe/gql"
 
 function mobileHeaders(bearerToken: string) {
   return {
@@ -13,6 +12,9 @@ export type OTSlot = {
   dateTime: string   // "2026-06-28T20:00"
   slotHash: string
   token: string      // slotAvailabilityToken
+  points?: number
+  slotType?: string
+  diningAreaId?: string  // actual dining area id — required for lock, varies per restaurant
 }
 
 export type OTGuestInfo = {
@@ -58,29 +60,45 @@ export async function findOTSlots(
   const url = new URL(`${MOBILE_BASE}/api/v3/restaurant/${restaurantId}`)
   url.searchParams.set("dateTime", dateTime)
   url.searchParams.set("partySize", String(partySize))
-  url.searchParams.set("forceNextAvailable", "true")
-  url.searchParams.set("includeNextAvailable", "true")
   url.searchParams.set("allowPop", "true")
-  url.searchParams.set("includeOffers", "true")
-  url.searchParams.set("requestTicket", "true")
-  url.searchParams.set("requestAttributeTables", "true")
-  url.searchParams.set("stats", "numBooked")
   url.searchParams.set("partnerId", "84")
+  // availabilityToken is required for slots to be returned; {"v":3,"m":0,"p":0,"s":0,"n":0} base64-encoded
+  url.searchParams.set("availabilityToken", "eyJ2IjozLCJtIjowLCJwIjowLCJzIjowLCJuIjowfQ")
+  url.searchParams.set("fallbackToNextAvailable", "1")
+  url.searchParams.set("forceNextAvailable", "true")
+  url.searchParams.set("includeOffers", "true")
+  url.searchParams.set("requestAttributeTables", "true")
+  url.searchParams.set("requestTicket", "true")
+  url.searchParams.set("stats", "numBooked")
 
   const res = await fetch(url.toString(), { headers: mobileHeaders(bearerToken) })
   if (!res.ok) throw new Error(`OT findSlots failed: ${res.status}`)
   const data = await res.json()
 
+  // Slots live at data.availability.availability.timeslots
+  const timeslots: {
+    dateTime?: string; slotHash?: number | string; token?: string; available?: boolean; type?: string; points?: number
+    diningAreas?: { id?: string; environment?: string; availableAttributes?: string[] }[]
+  }[] = data?.availability?.availability?.timeslots ?? []
+
   const slots: OTSlot[] = []
-  for (const day of data?.suggestedAvailability ?? []) {
-    for (const slot of day?.timeslots ?? []) {
-      if (!slot.dateTime || !slot.slotHash) continue
-      slots.push({
-        dateTime: slot.dateTime,
-        slotHash: String(slot.slotHash),
-        token: slot.token ?? slot.slotAvailabilityToken ?? "",
-      })
-    }
+  for (const slot of timeslots) {
+    if (!slot.dateTime || !slot.slotHash || slot.available === false) continue
+    // Filter to the requested date
+    if (!slot.dateTime.startsWith(date)) continue
+    // Pick first non-outdoor dining area id (skip outdoor/patio)
+    const indoorArea = slot.diningAreas?.find(
+      (a) => a.environment !== "OUTDOOR" && a.availableAttributes?.includes("default")
+    )
+    const diningAreaId = indoorArea?.id ?? slot.diningAreas?.[0]?.id ?? "1"
+    slots.push({
+      dateTime: slot.dateTime,
+      slotHash: String(slot.slotHash),
+      token: slot.token ?? "",
+      points: slot.points ?? 100,
+      slotType: slot.type ?? "Standard",
+      diningAreaId,
+    })
   }
   return slots
 }
@@ -126,8 +144,12 @@ export async function bookOTSlot(
       dateTime: slot.dateTime,
       partySize,
       hash: slot.slotHash,
+      intendedPoints: slot.points ?? 100,
+      intendedPointsType: slot.slotType ?? "Standard",
+      hasAccessRuleDiningAttribute: false,
+      userLocation: { countryCode: "US", regionCode: "NY" },
       attribution: { partnerId: "84" },
-      selectedDiningArea: { tableAttribute: "default", diningAreaId: "1" },
+      selectedDiningArea: { tableAttribute: "default", diningAreaId: slot.diningAreaId ?? "1" },
     }),
   })
   if (!lockRes.ok) {
@@ -153,9 +175,14 @@ export async function bookOTSlot(
       number: guest.phone.replace(/\D/g, ""),
       countryId: "US",
       notes: "",
+      type: slot.slotType ?? "Standard",
+      points: slot.points ?? 100,
       loadInvitations: false,
+      hasAccessRuleDiningAttribute: false,
+      diningFormOptIn: false,
+      loyaltyProgramOptIn: true,
       attribution: { partnerId: "84" },
-      selectedDiningArea: { tableAttribute: "default", diningAreaId: "1" },
+      selectedDiningArea: { tableAttribute: "default", diningAreaId: slot.diningAreaId ?? "1" },
       location: { latitude: 40.74, longitude: -73.98 },
     }),
   })
