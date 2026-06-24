@@ -238,7 +238,7 @@ export function AddTargetModal({
         {/* Platform toggle */}
         <div className="flex gap-1 mb-4 bg-gray-800 p-1 rounded-xl">
           <button
-            onClick={() => { setPlatform("resy"); setSelected(null); setQuery(""); setOtUrl(""); setOtUrlError("") }}
+            onClick={() => { setPlatform("resy"); setSelected(null); setQuery(""); setResults([]); setShowDropdown(false); setOtUrl(""); setOtUrlError("") }}
             className={`flex-1 py-2.5 rounded-lg text-xs font-medium transition-colors ${
               platform === "resy" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-gray-200"
             }`}
@@ -246,7 +246,7 @@ export function AddTargetModal({
             Resy
           </button>
           <button
-            onClick={() => { setPlatform("opentable"); setSelected(null); setQuery(""); setOtUrl(""); setOtUrlError("") }}
+            onClick={() => { setPlatform("opentable"); setSelected(null); setQuery(""); setResults([]); setShowDropdown(false); setOtUrl(""); setOtUrlError("") }}
             className={`flex-1 py-2.5 rounded-lg text-xs font-medium transition-colors ${
               platform === "opentable" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"
             }`}
