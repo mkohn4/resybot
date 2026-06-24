@@ -41,6 +41,7 @@ model User {
   accounts         Account[]
   sessions         Session[]
   resyCredential   ResyCredential?
+  otGuestProfile   OTGuestProfile?
   targets          ReservationTarget[]
 }
 
@@ -68,6 +69,7 @@ model ResyCredential {
 model ReservationTarget {
   id                String       @id @default(cuid())
   userId            String
+  platform          Platform     @default(RESY)
   venueId           Int
   venueName         String
   neighborhood      String?
@@ -87,6 +89,22 @@ model ReservationTarget {
   updatedAt         DateTime     @updatedAt
   user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   attempts          SnipeAttempt[]
+}
+
+model OTGuestProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  firstName   String
+  lastName    String
+  phone       String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum Platform {
+  RESY
+  OPENTABLE
 }
 
 enum TargetMode {

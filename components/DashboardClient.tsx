@@ -5,6 +5,7 @@ import { signOut } from "next-auth/react"
 import Link from "next/link"
 import { AddTargetModal } from "./AddTargetModal"
 import { CredentialsModal } from "./CredentialsModal"
+import { OTProfileModal } from "./OTProfileModal"
 import { TargetCard } from "./TargetCard"
 
 type Target = {
@@ -18,6 +19,7 @@ type Target = {
   preferredTimes: string[]
   snipeAt: Date
   status: string
+  platform: string
   bookedSlot: string | null
   lastAttemptAt: Date | null
   notificationEmail: string | null
@@ -28,13 +30,16 @@ type Props = {
   user: { name: string; email: string; image: string }
   initialTargets: Target[]
   hasCredentials: boolean
+  hasOTProfile: boolean
 }
 
-export function DashboardClient({ user, initialTargets, hasCredentials }: Props) {
+export function DashboardClient({ user, initialTargets, hasCredentials, hasOTProfile }: Props) {
   const [targets, setTargets] = useState<Target[]>(initialTargets)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showCredModal, setShowCredModal] = useState(!hasCredentials)
+  const [showOTModal, setShowOTModal] = useState(false)
   const [credsSaved, setCredsSaved] = useState(hasCredentials)
+  const [otProfileSaved, setOTProfileSaved] = useState(hasOTProfile)
 
   async function refreshTargets() {
     const res = await fetch("/api/targets")
@@ -75,6 +80,12 @@ export function DashboardClient({ user, initialTargets, hasCredentials }: Props)
               className="text-sm text-gray-400 hover:text-white transition-colors py-2 px-2"
             >
               {credsSaved ? "Resy ✓" : "Connect Resy"}
+            </button>
+            <button
+              onClick={() => setShowOTModal(true)}
+              className="text-sm text-gray-400 hover:text-white transition-colors py-2 px-2"
+            >
+              {otProfileSaved ? "OT ✓" : "Connect OT"}
             </button>
             <Link
               href="/dashboard/lookup"
@@ -215,6 +226,16 @@ export function DashboardClient({ user, initialTargets, hasCredentials }: Props)
           onSaved={() => {
             setCredsSaved(true)
             setShowCredModal(false)
+          }}
+        />
+      )}
+
+      {showOTModal && (
+        <OTProfileModal
+          onClose={() => setShowOTModal(false)}
+          onSaved={() => {
+            setOTProfileSaved(true)
+            setShowOTModal(false)
           }}
         />
       )}

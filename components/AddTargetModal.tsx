@@ -10,6 +10,7 @@ const PREFERRED_TIMES = ["18:30", "18:45", "19:00", "19:15", "19:30", "19:45", "
 const DEFAULT_TIMES = ["20:00", "20:15", "20:30", "19:30", "19:45", "20:45", "21:00"]
 
 type Mode = "scheduled" | "now" | "watch"
+type Platform = "resy" | "opentable"
 
 export function AddTargetModal({
   onClose,
@@ -18,6 +19,7 @@ export function AddTargetModal({
   onClose: () => void
   onAdded: (target: unknown) => void
 }) {
+  const [platform, setPlatform] = useState<Platform>("resy")
   const [mode, setMode] = useState<Mode>("scheduled")
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<VenueResult[]>([])
@@ -42,13 +44,13 @@ export function AddTargetModal({
     if (suppressSearch.current) { suppressSearch.current = false; return }
     if (query.length < 2 || useCustom) { setResults([]); return }
     const timer = setTimeout(async () => {
-      const res = await fetch(`/api/venues/lookup?q=${encodeURIComponent(query)}`)
+      const res = await fetch(`/api/venues/lookup?q=${encodeURIComponent(query)}&platform=${platform}`)
       const data = await res.json()
       setResults(data.results ?? [])
       setShowDropdown(true)
     }, 200)
     return () => clearTimeout(timer)
-  }, [query, useCustom])
+  }, [query, useCustom, platform])
 
   useEffect(() => {
     if (!date || !selected) return
@@ -116,6 +118,7 @@ export function AddTargetModal({
           preferredTimes,
           snipeAt: snipeTime,
           mode: mode === "watch" ? "WATCH" : "SNIPE",
+          platform: platform === "opentable" ? "OPENTABLE" : "RESY",
           notificationEmail: notificationEmail || undefined,
         }),
       })
@@ -198,6 +201,26 @@ export function AddTargetModal({
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-start justify-center p-4 overflow-y-auto">
       <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6 w-full max-w-lg shadow-2xl my-4">
         <h2 className="text-lg font-bold text-white mb-5">Add Reservation Target</h2>
+
+        {/* Platform toggle */}
+        <div className="flex gap-1 mb-4 bg-gray-800 p-1 rounded-xl">
+          <button
+            onClick={() => { setPlatform("resy"); setSelected(null); setQuery("") }}
+            className={`flex-1 py-2.5 rounded-lg text-xs font-medium transition-colors ${
+              platform === "resy" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-gray-200"
+            }`}
+          >
+            Resy
+          </button>
+          <button
+            onClick={() => { setPlatform("opentable"); setSelected(null); setQuery("") }}
+            className={`flex-1 py-2.5 rounded-lg text-xs font-medium transition-colors ${
+              platform === "opentable" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"
+            }`}
+          >
+            OpenTable
+          </button>
+        </div>
 
         {/* Mode toggle */}
         <div className="flex gap-1 mb-5 bg-gray-800 p-1 rounded-xl">

@@ -21,6 +21,7 @@ type Target = {
   preferredTimes: string[]
   snipeAt: Date
   status: string
+  platform: string
   bookedSlot: string | null
   lastAttemptAt: Date | null
   notificationEmail: string | null
@@ -122,6 +123,9 @@ export function TargetCard({
             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_STYLES[target.status] ?? "bg-gray-700 text-gray-400"}`}>
               {STATUS_LABELS[target.status] ?? target.status}
             </span>
+            {target.platform === "OPENTABLE" && (
+              <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-500/20 text-blue-400">OT</span>
+            )}
           </div>
           <div className="flex items-center gap-3 text-xs text-gray-400 flex-wrap">
             {target.neighborhood && <span>{target.neighborhood}</span>}

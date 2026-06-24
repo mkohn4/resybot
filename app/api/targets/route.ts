@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const body = await req.json()
-  const { venueId, venueName, neighborhood, cuisine, date, partySize, preferredTimes, snipeAt, notificationEmail, mode } = body
+  const { venueId, venueName, neighborhood, cuisine, date, partySize, preferredTimes, snipeAt, notificationEmail, mode, platform } = body
 
   if (!venueId || !venueName || !date || !snipeAt) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
   const target = await prisma.reservationTarget.create({
     data: {
       userId: session.user.id,
+      platform: platform === "OPENTABLE" ? "OPENTABLE" : "RESY",
       venueId: Number(venueId),
       venueName,
       neighborhood,

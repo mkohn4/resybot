@@ -7,13 +7,14 @@ export default async function DashboardPage() {
   const session = await auth()
   if (!session?.user?.id) redirect("/login")
 
-  const [targets, credential] = await Promise.all([
+  const [targets, credential, otProfile] = await Promise.all([
     prisma.reservationTarget.findMany({
       where: { userId: session.user.id },
       include: { attempts: { orderBy: { attemptAt: "desc" }, take: 3 } },
       orderBy: { createdAt: "desc" },
     }),
     prisma.resyCredential.findUnique({ where: { userId: session.user.id } }),
+    prisma.oTGuestProfile.findUnique({ where: { userId: session.user.id } }),
   ])
 
   return (
@@ -21,6 +22,7 @@ export default async function DashboardPage() {
       user={{ name: session.user.name ?? "", email: session.user.email ?? "", image: session.user.image ?? "" }}
       initialTargets={targets}
       hasCredentials={!!credential}
+      hasOTProfile={!!otProfile}
     />
   )
 }
