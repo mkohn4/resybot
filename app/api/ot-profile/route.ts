@@ -14,8 +14,8 @@ export async function GET() {
   return NextResponse.json({
     profile: {
       firstName: profile.firstName,
-      lastName: profile.lastName,
-      phone: profile.phone,
+      lastName: profile.encryptedLastName ? decrypt(profile.encryptedLastName) : "",
+      phone: profile.encryptedPhone ? decrypt(profile.encryptedPhone) : "",
       gpid: profile.gpid,
       customerId: profile.customerId,
     },
@@ -47,8 +47,8 @@ export async function POST(req: NextRequest) {
     where: { userId: session.user.id },
     update: {
       firstName: otUser.firstName,
-      lastName: otUser.lastName,
-      phone: otUser.phone,
+      encryptedLastName: encrypt(otUser.lastName),
+      encryptedPhone: encrypt(otUser.phone),
       encryptedBearerToken: encrypt(bearerToken),
       gpid: otUser.gpid,
       customerId: otUser.customerId,
@@ -56,8 +56,8 @@ export async function POST(req: NextRequest) {
     create: {
       userId: session.user.id,
       firstName: otUser.firstName,
-      lastName: otUser.lastName,
-      phone: otUser.phone,
+      encryptedLastName: encrypt(otUser.lastName),
+      encryptedPhone: encrypt(otUser.phone),
       encryptedBearerToken: encrypt(bearerToken),
       gpid: otUser.gpid,
       customerId: otUser.customerId,
@@ -67,8 +67,8 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     profile: {
       firstName: profile.firstName,
-      lastName: profile.lastName,
-      phone: profile.phone,
+      lastName: decrypt(profile.encryptedLastName),
+      phone: decrypt(profile.encryptedPhone),
       gpid: profile.gpid,
       customerId: profile.customerId,
     },

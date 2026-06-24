@@ -105,8 +105,8 @@ export type TargetRow = {
     } | null
     otGuestProfile: {
       firstName: string
-      lastName: string
-      phone: string
+      encryptedLastName: string
+      encryptedPhone: string
       encryptedBearerToken: string
       gpid: string
       customerId: string
@@ -228,9 +228,9 @@ async function processOTTarget(target: TargetRow) {
       if (best) {
         await bookOTSlot(target.venueId, best, target.partySize, {
           firstName: profile.firstName,
-          lastName: profile.lastName,
+          lastName: decrypt(profile.encryptedLastName),
           email: guestEmail,
-          phone: profile.phone,
+          phone: decrypt(profile.encryptedPhone),
           gpid: profile.gpid,
           customerId: profile.customerId,
         }, bearerToken)

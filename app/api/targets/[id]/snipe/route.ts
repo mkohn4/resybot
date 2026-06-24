@@ -136,9 +136,9 @@ async function handleOTSnipe({ id, target, dateStr, stillFuture, userId }: {
 
     await bookOTSlot(target.venueId, best, target.partySize, {
       firstName: profile.firstName,
-      lastName: profile.lastName,
+      lastName: decrypt(profile.encryptedLastName),
       email: guestEmail,
-      phone: profile.phone,
+      phone: decrypt(profile.encryptedPhone),
       gpid: profile.gpid,
       customerId: profile.customerId,
     }, bearerToken)

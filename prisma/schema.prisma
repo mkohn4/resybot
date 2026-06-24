@@ -95,8 +95,8 @@ model OTGuestProfile {
   id                   String   @id @default(cuid())
   userId               String   @unique
   firstName            String
-  lastName             String
-  phone                String
+  encryptedLastName    String
+  encryptedPhone       String
   encryptedBearerToken String
   gpid                 String
   customerId           String
