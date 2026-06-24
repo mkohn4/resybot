@@ -7,6 +7,60 @@ import { suggestSnipeTime } from "@/lib/restaurants"
 
 type VenueResult = Restaurant & { source?: "curated" | "resy" | "opentable"; platform?: "resy" | "opentable" }
 
+// Called from the browser so the user's residential IP bypasses Akamai's server-side block
+async function searchOTVenuesBrowser(query: string): Promise<VenueResult[]> {
+  const csrf = crypto.randomUUID()
+  try {
+    const res = await fetch(
+      "https://www.opentable.com/dapi/fe/gql?optype=query&opname=Autocomplete",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "*/*",
+          origin: "https://www.opentable.com",
+          referer: "https://www.opentable.com/",
+          "x-csrf-token": csrf,
+          cookie: `OT-SessionId=${csrf}`,
+        },
+        body: JSON.stringify({
+          operationName: "Autocomplete",
+          variables: { term: query, latitude: 40.758, longitude: -73.9855, useNewVersion: true },
+          extensions: {
+            persistedQuery: {
+              version: 1,
+              sha256Hash: "3cabca79abcb0db395d3cbebb4d47d41f3ddd69442eba3a57f76b943cceb8cf4",
+            },
+          },
+        }),
+      }
+    )
+    if (!res.ok) return []
+    const data = await res.json()
+    const hits =
+      data?.data?.autocomplete?.autocompleteResults ??
+      data?.data?.autocomplete?.restaurants ??
+      data?.data?.restaurants ??
+      []
+    return hits
+      .filter((r: { id?: number; name?: string }) => r.id && r.name)
+      .map((r: { id: number; name: string; neighborhoodName?: string; metroName?: string; cuisineList?: string[] }) => ({
+        venueId: r.id,
+        name: r.name,
+        neighborhood: r.neighborhoodName ?? r.metroName ?? "NYC",
+        cuisine: r.cuisineList?.[0] ?? "",
+        priceRange: "",
+        daysOut: null as unknown as number,
+        releaseTime: null,
+        releaseNotes: "OpenTable — no release time data",
+        platform: "opentable" as const,
+        source: "opentable" as const,
+      }))
+  } catch {
+    return []
+  }
+}
+
 const LUNCH_TIMES   = ["11:30", "11:45", "12:00", "12:15", "12:30", "12:45", "13:00", "13:15", "13:30"]
 const DINNER_TIMES  = ["17:30", "17:45", "18:00", "18:15", "18:30", "18:45", "19:00", "19:15", "19:30", "19:45", "20:00", "20:15", "20:30", "20:45", "21:00", "21:15", "21:30", "21:45", "22:00", "22:15", "22:30"]
 const PREFERRED_TIMES = [...LUNCH_TIMES, ...DINNER_TIMES]
@@ -55,13 +109,12 @@ export function AddTargetModal({
     }
     const timer = setTimeout(async () => {
       try {
-        // Fetch both platforms simultaneously
-        const [resyRes, otRes] = await Promise.all([
-          fetch(`/api/venues/lookup?q=${encodeURIComponent(query)}&platform=resy`),
-          fetch(`/api/venues/lookup?q=${encodeURIComponent(query)}&platform=opentable`),
+        // Resy search goes server-side; OT search goes direct from browser (bypasses Akamai)
+        const [resyRes, otResults] = await Promise.all([
+          fetch(`/api/venues/lookup?q=${encodeURIComponent(query)}&platform=resy`).then(r => r.json()),
+          searchOTVenuesBrowser(query),
         ])
-        const [resyData, otData] = await Promise.all([resyRes.json(), otRes.json()])
-        const combined = [...(resyData.results ?? []), ...(otData.results ?? [])]
+        const combined = [...(resyRes.results ?? []), ...otResults]
         setResults(combined)
         setShowDropdown(true)
       } catch {

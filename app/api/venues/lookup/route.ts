@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import { NYC_RESTAURANTS } from "@/lib/restaurants"
-import { searchOTVenues } from "@/lib/opentable"
 
 const RESY_API_KEY = "VbWk7s3L4KiK5fzlO7JD3Q5EYolJI7n5"
 const PRICE_LABELS: Record<number, string> = { 1: "$", 2: "$$", 3: "$$$", 4: "$$$$" }
@@ -70,29 +69,5 @@ export async function GET(req: NextRequest) {
     } catch { /* non-fatal */ }
   }
 
-  // Search OpenTable live
-  let otResults: {
-    venueId: number | null; name: string; neighborhood: string; cuisine: string
-    priceRange: string; daysOut: null; releaseTime: null; releaseNotes: string
-    platform: "opentable"; source: "opentable"
-  }[] = []
-  if (!platformFilter || platformFilter === "opentable") {
-    try {
-      const venues = await searchOTVenues(q)
-      otResults = venues.map((v) => ({
-        venueId: v.id,
-        name: v.name,
-        neighborhood: v.neighborhood,
-        cuisine: v.cuisine,
-        priceRange: "",
-        daysOut: null,
-        releaseTime: null,
-        releaseNotes: "OpenTable — no release time data",
-        platform: "opentable" as const,
-        source: "opentable" as const,
-      }))
-    } catch { /* non-fatal */ }
-  }
-
-  return NextResponse.json({ results: [...curated, ...resyResults, ...otResults] })
+  return NextResponse.json({ results: [...curated, ...resyResults] })
 }
