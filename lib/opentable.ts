@@ -170,74 +170,36 @@ export async function bookOTSlot(
   }
 }
 
-// Venue search — still uses the web GQL endpoint (no auth needed, no booking)
-export async function searchOTVenues(query: string): Promise<{
+// Venue search via mobile autocomplete API — Bearer token required.
+// Returns results from interspersedResults[] (the populated array in the response).
+export async function searchOTVenues(query: string, bearerToken: string): Promise<{
   id: number
   name: string
   neighborhood: string
   cuisine: string
   city: string
 }[]> {
-  function gqlHeaders() {
-    const csrf = crypto.randomUUID()
-    return {
-      "content-type": "application/json",
-      accept: "*/*",
-      origin: "https://www.opentable.com",
-      referer: "https://www.opentable.com/",
-      "x-csrf-token": csrf,
-      cookie: `OT-SessionId=${crypto.randomUUID()}`,
-      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
-    }
-  }
-
-  const body = {
-    operationName: "Autocomplete",
-    variables: { term: query, latitude: 40.758, longitude: -73.9855, useNewVersion: true },
-    extensions: {
-      persistedQuery: {
-        version: 1,
-        sha256Hash: "3cabca79abcb0db395d3cbebb4d47d41f3ddd69442eba3a57f76b943cceb8cf4",
-      },
-    },
-  }
-
-  const toResult = (r: { id?: number; name?: string; metroName?: string; neighborhoodName?: string; cuisineList?: string[] }) => ({
-    id: r.id ?? 0,
-    name: r.name ?? "Unknown",
-    neighborhood: r.neighborhoodName ?? r.metroName ?? "NYC",
-    cuisine: r.cuisineList?.[0] ?? "",
-    city: r.metroName ?? "New York",
-  })
-
-  const res = await fetch(`${GQL_URL}?optype=query&opname=Autocomplete`, {
-    method: "POST",
-    headers: gqlHeaders(),
-    body: JSON.stringify(body),
+  const res = await fetch(`${MOBILE_BASE}/api/v4/personalize/autocompleteInterspersed`, {
+    method: "PUT",
+    headers: mobileHeaders(bearerToken),
+    body: JSON.stringify({
+      term: query,
+      userLocation: { latitude: 40.74, longitude: -73.98 },
+      location: { latitude: 40.74, longitude: -73.98 },
+      includeListings: true,
+    }),
   })
   if (!res.ok) return []
   const data = await res.json()
-  const results =
-    data?.data?.autocomplete?.autocompleteResults ??
-    data?.data?.autocomplete?.restaurants ??
-    data?.data?.restaurants ??
-    []
-  const hits = results
-    .filter((r: { id?: number; name?: string }) => r.id && r.name)
-    .map(toResult)
-  if (hits.length > 0) return hits
-
-  // Retry with legacy index
-  const res2 = await fetch(`${GQL_URL}?optype=query&opname=Autocomplete`, {
-    method: "POST",
-    headers: gqlHeaders(),
-    body: JSON.stringify({ ...body, variables: { ...body.variables, useNewVersion: false } }),
-  })
-  if (!res2.ok) return []
-  const data2 = await res2.json()
-  const results2 =
-    data2?.data?.autocomplete?.autocompleteResults ??
-    data2?.data?.autocomplete?.restaurants ??
-    []
-  return results2.filter((r: { id?: number; name?: string }) => r.id && r.name).map(toResult)
+  const hits: { id?: string; name?: string; address?: { city?: string }; neighborhoodName?: string; cuisines?: { name?: string }[] }[] =
+    data?.interspersedResults ?? data?.results ?? []
+  return hits
+    .filter((r) => r.id && r.name && r.id !== "" )
+    .map((r) => ({
+      id: Number(r.id),
+      name: r.name ?? "Unknown",
+      neighborhood: r.neighborhoodName ?? r.address?.city ?? "NYC",
+      cuisine: r.cuisines?.[0]?.name ?? "",
+      city: r.address?.city ?? "New York",
+    }))
 }

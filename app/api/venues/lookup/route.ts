@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { NYC_RESTAURANTS } from "@/lib/restaurants"
+import { searchOTVenues } from "@/lib/opentable"
+import { auth } from "@/lib/auth"
+import { prisma } from "@/lib/db"
+import { decrypt } from "@/lib/crypto"
 
 const RESY_API_KEY = "VbWk7s3L4KiK5fzlO7JD3Q5EYolJI7n5"
 const PRICE_LABELS: Record<number, string> = { 1: "$", 2: "$$", 3: "$$$", 4: "$$$$" }
@@ -69,5 +73,36 @@ export async function GET(req: NextRequest) {
     } catch { /* non-fatal */ }
   }
 
-  return NextResponse.json({ results: [...curated, ...resyResults] })
+  // Search OpenTable via mobile API using the user's stored bearer token
+  let otResults: {
+    venueId: number; name: string; neighborhood: string; cuisine: string
+    priceRange: string; daysOut: null; releaseTime: null; releaseNotes: string
+    platform: "opentable"; source: "opentable"
+  }[] = []
+  if (!platformFilter || platformFilter === "opentable") {
+    try {
+      const session = await auth()
+      if (session?.user?.id) {
+        const otProfile = await prisma.oTGuestProfile.findUnique({ where: { userId: session.user.id } })
+        if (otProfile?.encryptedBearerToken) {
+          const bearerToken = decrypt(otProfile.encryptedBearerToken)
+          const venues = await searchOTVenues(q, bearerToken)
+          otResults = venues.map((v) => ({
+            venueId: v.id,
+            name: v.name,
+            neighborhood: v.neighborhood,
+            cuisine: v.cuisine,
+            priceRange: "",
+            daysOut: null,
+            releaseTime: null,
+            releaseNotes: "OpenTable — no release time data",
+            platform: "opentable" as const,
+            source: "opentable" as const,
+          }))
+        }
+      }
+    } catch { /* non-fatal */ }
+  }
+
+  return NextResponse.json({ results: [...curated, ...resyResults, ...otResults] })
 }
