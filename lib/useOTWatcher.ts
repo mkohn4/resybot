@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useCallback } from "react"
-import { pickBestOTSlot, buildOTBookingPayload, type OTSlot } from "./opentable"
+import { pickBestOTSlot, buildOTBookingPayload, type OTSlot } from "@/lib/opentable"
 
 type WatchTarget = {
   id: string
@@ -21,24 +21,25 @@ type OTProfile = {
 }
 
 const OT_AVAIL_HASH = "e6b87021ed6e865a7778aa39d35d09864c1be29c683c707602dd3de43c854d86"
-const OT_GQL = "https://www.opentable.com/dapi/fe/gql"
 
-// Fetch OT availability from the browser (residential IP — datacenter IPs blocked by Akamai).
-export async function fetchOTSlotsBrowser(
+async function otProxy(endpoint: string, body: unknown): Promise<unknown> {
+  const res = await fetch("/api/ot-proxy", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ endpoint, body }),
+  })
+  if (!res.ok) throw new Error(`OT proxy error: ${res.status}`)
+  return res.json()
+}
+
+export async function fetchOTSlots(
   venueId: number,
   date: string,
   partySize: number
 ): Promise<OTSlot[]> {
-  const res = await fetch(`${OT_GQL}?optype=query&opname=RestaurantsAvailability`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      accept: "*/*",
-      origin: "https://www.opentable.com",
-      referer: "https://www.opentable.com/",
-      "x-csrf-token": crypto.randomUUID(),
-    },
-    body: JSON.stringify({
+  const data = await otProxy(
+    `/dapi/fe/gql?optype=query&opname=RestaurantsAvailability`,
+    {
       operationName: "RestaurantsAvailability",
       variables: {
         restaurantIds: [venueId],
@@ -54,10 +55,9 @@ export async function fetchOTSlotsBrowser(
       extensions: {
         persistedQuery: { version: 1, sha256Hash: OT_AVAIL_HASH },
       },
-    }),
-  })
-  if (!res.ok) return []
-  const data = await res.json()
+    }
+  ) as { data?: { availability?: { availabilityDays?: { slots?: { isAvailable?: boolean; timeOffsetMinutes?: number; slotHash?: string; slotAvailabilityToken?: string }[] }[] }[] } }
+
   const slots: OTSlot[] = []
   for (const venue of data?.data?.availability ?? []) {
     for (const day of venue.availabilityDays ?? []) {
@@ -67,8 +67,8 @@ export async function fetchOTSlotsBrowser(
         const h = Math.floor(offsetMins / 60), m = offsetMins % 60
         slots.push({
           dateTime: `${date}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`,
-          slotHash: slot.slotHash,
-          slotAvailabilityToken: slot.slotAvailabilityToken,
+          slotHash: slot.slotHash ?? "",
+          slotAvailabilityToken: slot.slotAvailabilityToken ?? "",
           timeOffsetMinutes: offsetMins,
         })
       }
@@ -90,38 +90,23 @@ export async function bookOTFromBrowser(
   profile: OTProfile
 ): Promise<{ success: boolean; slot?: string; time?: string; fallbackToWatch?: boolean; message?: string }> {
   try {
-    const slots = await fetchOTSlotsBrowser(venueId, date, partySize)
+    const slots = await fetchOTSlots(venueId, date, partySize)
     const best = pickBestOTSlot(slots, preferredTimes)
     if (!best) {
       return { success: false, fallbackToWatch: true, message: "No slots in your preferred times right now" }
     }
 
-    // POST booking directly from browser to OT
-    const { url, body } = buildOTBookingPayload(venueId, best, partySize, {
+    // POST booking via proxy (handles session + CSRF)
+    const { body } = buildOTBookingPayload(venueId, best, partySize, {
       firstName: profile.firstName,
       lastName: profile.lastName,
       email: profile.email,
       phone: profile.phone,
     })
-    const bookRes = await fetch(url, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "*/*",
-        origin: "https://www.opentable.com",
-        referer: "https://www.opentable.com/",
-        "x-csrf-token": crypto.randomUUID(),
-      },
-      body: JSON.stringify(body),
-    })
-    if (!bookRes.ok) {
-      const errText = await bookRes.text()
-      return { success: false, message: `OT booking failed: ${bookRes.status} — ${errText}` }
-    }
-    const bookData = await bookRes.json()
+    const bookData = await otProxy("/dapi/booking/make-reservation", body) as { reservationId?: number; id?: number }
     const reservationId = String(bookData?.reservationId ?? bookData?.id ?? "unknown")
 
-    // Record in DB — server just saves, no OT calls
+    // Record confirmed booking in DB
     const recordRes = await fetch(`/api/targets/${targetId}/ot-book`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
