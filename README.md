@@ -1,12 +1,12 @@
 # ResyBot
 
-A self-hosted bot that automatically snipes hard-to-get NYC restaurant reservations on [Resy](https://resy.com) the moment they open. Built with Next.js 16, deployed on Vercel with a 1-minute cron job via [cron-job.org](https://cron-job.org).
+A self-hosted bot that automatically snipes hard-to-get NYC restaurant reservations on [Resy](https://resy.com) and [OpenTable](https://www.opentable.com) the moment they open. Built with Next.js 16, deployed on Vercel with a 1-minute cron job via [cron-job.org](https://cron-job.org).
 
 ## How it works
 
 1. Sign in with Google
-2. Connect your Resy account (credentials are AES-256-GCM encrypted before storage)
-3. Add a restaurant target — search from a curated list of 27 popular NYC spots, or enter any venue ID manually
+2. Connect your Resy account (credentials encrypted with AES-256-GCM) and/or your OpenTable account (Bearer token extracted via [Proxyman](https://proxyman.io))
+3. Add a restaurant target — search across Resy and OpenTable from the same search box, platform auto-detected
 4. Choose a booking mode:
    - **Scheduled** — bot wakes at a specific time and snipes when reservations open (snipe time auto-suggested per restaurant)
    - **Book Now** — immediately checks for available slots and books one right now
@@ -15,16 +15,19 @@ A self-hosted bot that automatically snipes hard-to-get NYC restaurant reservati
 
 ## Features
 
+- **Resy + OpenTable** — snipe on both platforms from one interface; platform auto-detected per restaurant
 - **Google OAuth** login — no passwords to manage
-- **Encrypted credential storage** — Resy email + password stored with AES-256-GCM, auth token refreshed automatically
-- **Curated NYC restaurant list** — 27 top restaurants pre-loaded with known release times (Carbone, Lilia, Don Angie, 4 Charles, Atomix, Le Bernardin, and more)
+- **Encrypted credential storage** — Resy email/password and OT Bearer token stored with AES-256-GCM
+- **Curated NYC restaurant list** — 27 top Resy restaurants pre-loaded with known release times (Carbone, Lilia, Don Angie, 4 Charles, Atomix, Le Bernardin, and more)
 - **Auto-suggested snipe times** — the UI calculates the right moment based on each restaurant's drop schedule
 - **Smart slot selection** — prefers indoor seating, tries times in your priority order (8–8:30pm first, then 7:30–9pm), falls back gracefully
-- **10-second snipe window** — polls the Resy API for 10 seconds around the release time for maximum chance of success
+- **10-second snipe window** — polls for 10 seconds around the release time for maximum chance of success
 - **Watch mode** — polls every minute for cancellations on fully-booked restaurants
+- **Auto-fallback** — a missed SNIPE automatically switches to Watch mode rather than failing
 - **Email notifications** — success or failure emails via Resend (free tier)
 - **Multiple targets** — watch any number of restaurants simultaneously
-- **Venue lookup tool** — search any NYC restaurant by name with a curated sidebar for quick selection
+- **Venue lookup tool** — search Resy and OpenTable restaurants by name in one place
+- **Light/dark theme** — persisted via localStorage, no flash on load
 - **Attempt history** — see every booking attempt per target in the dashboard
 
 ## Preferred time priority
@@ -46,7 +49,7 @@ Times are tried in the order you select them in the UI. Patio/outside/outdoor se
 | Styling | Tailwind CSS |
 | Hosting | Vercel |
 
-## Curated restaurants
+## Resy curated restaurants
 
 Pre-loaded with release time data for: Carbone, Don Angie, Lilia, 4 Charles Prime Rib, Rezdôra, Atomix, Jua, Torrisi, Frenchette, Le Bernardin, Laser Wolf, Gage & Tollner, Gramercy Tavern, Eleven Madison Park, The Grill, Nobu, Balthazar, Le Coucou, Dirty French, Crown Shy, Estela, Cosme, L'Artusi, Daniel, Jean-Georges, Ci Siamo, Momofuku Ko.
 
@@ -100,13 +103,25 @@ Vercel Hobby plan only allows daily crons. Instead, set up a free job at [cron-j
 - Schedule: every 1 minute
 - Header: `Authorization: Bearer <your CRON_SECRET>`
 
+### Connecting OpenTable
+
+OpenTable uses a Bearer token from the iOS app rather than a username/password. To get yours:
+
+1. Install [Proxyman](https://proxyman.io) on your iPhone (free tier works)
+2. Enable SSL proxying for `mobile-api.opentable.com`
+3. Open the OpenTable app and browse any restaurant
+4. Export a HAR file and find a request with `Authorization: Bearer <token>`
+5. Paste the token into ResyBot via **Connect OT** on the dashboard — it auto-fetches your name, phone, and loyalty ID
+
+The token is long-lived (weeks to months). If OT booking starts failing with an auth error, reconnect with a fresh token.
+
 ## Finding a Venue ID
 
-Use the built-in **Venue Lookup** tool in the app (top-right on the dashboard) to search any restaurant by name. For manual lookup: go to `resy.com`, open DevTools → Network, look for a request to `api.resy.com/4/find`, and grab the `venue_id` query parameter.
+Use the built-in **Venue Lookup** tool (top-right on the dashboard) to search any restaurant by name across both Resy and OpenTable.
 
 ## Security notes
 
-- Resy credentials are encrypted with AES-256-GCM before hitting the database — the encryption key never leaves your server environment
+- Resy credentials and OT Bearer tokens are encrypted with AES-256-GCM before hitting the database — the encryption key never leaves your server environment
 - The cron endpoint is protected by a `CRON_SECRET` bearer token
 - The dashboard requires Google authentication — only your account can access it
 - No credentials are ever logged or returned to the frontend in plaintext

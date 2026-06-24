@@ -117,6 +117,10 @@ Method: GET
 Schedule: every 1 minute
 Header: `Authorization: Bearer <CRON_SECRET>`
 
+## OT bookedSlot format
+
+OT stores `bookedSlot` as `"2026-07-10T20:00"` (ISO with `T`). Resy stores it as `"2026-07-10 20:00:00"` (space-separated). Any time display code must handle both — use `split("T")[1] ?? split(" ")[1]` to extract the time portion, and guard against `NaN` from `parseInt`.
+
 ## Planned: SevenRooms support (Phase 3)
 
 Full plan in memory (`project_sevenrooms_plan.md`). After Resy + OpenTable.
