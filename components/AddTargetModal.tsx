@@ -37,6 +37,9 @@ export function AddTargetModal({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [nowResult, setNowResult] = useState<{ success: boolean; message?: string; slot?: string; fallbackToWatch?: boolean } | null>(null)
+  const [otUrl, setOtUrl] = useState("")
+  const [otUrlLoading, setOtUrlLoading] = useState(false)
+  const [otUrlError, setOtUrlError] = useState("")
   const searchRef = useRef<HTMLDivElement>(null)
   const suppressSearch = useRef(false)
 
@@ -69,6 +72,36 @@ export function AddTargetModal({
     setQuery(r.name)
     setShowDropdown(false)
     setResults([])
+  }
+
+  async function resolveOtUrl() {
+    if (!otUrl.trim()) return
+    setOtUrlLoading(true)
+    setOtUrlError("")
+    try {
+      const res = await fetch("/api/venues/ot-resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: otUrl.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? "Could not resolve URL")
+      selectRestaurant({
+        venueId: data.id,
+        name: data.name,
+        neighborhood: data.neighborhood ?? "NYC",
+        cuisine: data.cuisine ?? "",
+        priceRange: "",
+        daysOut: null,
+        releaseTime: null,
+        releaseNotes: "OpenTable — no release time data",
+      } as Restaurant)
+      setOtUrl("")
+    } catch (err: unknown) {
+      setOtUrlError(err instanceof Error ? err.message : "Failed to resolve URL")
+    } finally {
+      setOtUrlLoading(false)
+    }
   }
 
   function toggleTime(t: string) {
@@ -205,7 +238,7 @@ export function AddTargetModal({
         {/* Platform toggle */}
         <div className="flex gap-1 mb-4 bg-gray-800 p-1 rounded-xl">
           <button
-            onClick={() => { setPlatform("resy"); setSelected(null); setQuery("") }}
+            onClick={() => { setPlatform("resy"); setSelected(null); setQuery(""); setOtUrl(""); setOtUrlError("") }}
             className={`flex-1 py-2.5 rounded-lg text-xs font-medium transition-colors ${
               platform === "resy" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-gray-200"
             }`}
@@ -213,7 +246,7 @@ export function AddTargetModal({
             Resy
           </button>
           <button
-            onClick={() => { setPlatform("opentable"); setSelected(null); setQuery("") }}
+            onClick={() => { setPlatform("opentable"); setSelected(null); setQuery(""); setOtUrl(""); setOtUrlError("") }}
             className={`flex-1 py-2.5 rounded-lg text-xs font-medium transition-colors ${
               platform === "opentable" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"
             }`}
@@ -312,6 +345,27 @@ export function AddTargetModal({
                 placeholder="Restaurant name"
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500 text-sm"
               />
+            </div>
+          )}
+          {platform === "opentable" && !useCustom && (
+            <div className="mt-3">
+              <p className="text-xs text-gray-500 mb-1.5">Can&apos;t find it? Paste the OpenTable URL:</p>
+              <div className="flex gap-2">
+                <input
+                  value={otUrl}
+                  onChange={(e) => setOtUrl(e.target.value)}
+                  placeholder="https://www.opentable.com/the-odeon"
+                  className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-xs"
+                />
+                <button
+                  onClick={resolveOtUrl}
+                  disabled={otUrlLoading || !otUrl.trim()}
+                  className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-xs font-medium px-3 py-2 rounded-lg transition-colors shrink-0"
+                >
+                  {otUrlLoading ? "…" : "Use"}
+                </button>
+              </div>
+              {otUrlError && <p className="text-red-400 text-xs mt-1">{otUrlError}</p>}
             </div>
           )}
           <button
