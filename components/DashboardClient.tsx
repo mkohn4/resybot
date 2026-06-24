@@ -27,14 +27,17 @@ type Target = {
   attempts: { id: string; attemptAt: Date; success: boolean; error: string | null; slot: string | null }[]
 }
 
+type OTProfile = { firstName: string; lastName: string; phone: string; email: string }
+
 type Props = {
   user: { name: string; email: string; image: string }
   initialTargets: Target[]
   hasCredentials: boolean
   hasOTProfile: boolean
+  otProfile: OTProfile | null
 }
 
-export function DashboardClient({ user, initialTargets, hasCredentials, hasOTProfile }: Props) {
+export function DashboardClient({ user, initialTargets, hasCredentials, hasOTProfile, otProfile }: Props) {
   const [targets, setTargets] = useState<Target[]>(initialTargets)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showCredModal, setShowCredModal] = useState(!hasCredentials)
@@ -54,7 +57,12 @@ export function DashboardClient({ user, initialTargets, hasCredentials, hasOTPro
     )
   }, [])
 
-  useOTWatcher(targets, handleOTBooked)
+  // Pass profile with email so watcher can book on behalf of user
+  const otProfileWithEmail = otProfile
+    ? { ...otProfile, email: user.email }
+    : null
+
+  useOTWatcher(targets, otProfileWithEmail, handleOTBooked)
 
   async function deleteTarget(id: string) {
     await fetch(`/api/targets/${id}`, { method: "DELETE" })

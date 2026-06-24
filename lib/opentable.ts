@@ -114,17 +114,16 @@ export function pickBestOTSlot(
   return null
 }
 
-export async function bookOTSlot(
+// Exported so the browser can POST directly to OT (avoids datacenter IP block).
+export function buildOTBookingPayload(
   restaurantId: number,
   slot: OTSlot,
-  date: string,
   partySize: number,
   guest: OTGuestInfo
-): Promise<{ reservationId: string }> {
-  const res = await fetch(`${DAPI_BASE}/booking/make-reservation`, {
-    method: "POST",
-    headers: makeHeaders(),
-    body: JSON.stringify({
+) {
+  return {
+    url: `${DAPI_BASE}/booking/make-reservation`,
+    body: {
       restaurantId,
       slotAvailabilityToken: slot.slotAvailabilityToken,
       slotHash: slot.slotHash,
@@ -146,7 +145,24 @@ export async function bookOTSlot(
       additionalServiceFees: [],
       tipAmount: 0,
       tipPercent: 0,
-    }),
+    },
+  }
+}
+
+// Server-side booking (only usable from residential IPs — not Vercel).
+// Kept for potential future use; browser should use buildOTBookingPayload instead.
+export async function bookOTSlot(
+  restaurantId: number,
+  slot: OTSlot,
+  date: string,
+  partySize: number,
+  guest: OTGuestInfo
+): Promise<{ reservationId: string }> {
+  const { url, body } = buildOTBookingPayload(restaurantId, slot, partySize, guest)
+  const res = await fetch(url, {
+    method: "POST",
+    headers: makeHeaders(),
+    body: JSON.stringify(body),
   })
 
   if (!res.ok) {
