@@ -8,6 +8,7 @@ import { CredentialsModal } from "./CredentialsModal"
 import { OTProfileModal } from "./OTProfileModal"
 import { TargetCard } from "./TargetCard"
 import { useOTWatcher } from "@/lib/useOTWatcher"
+import { ThemeToggle } from "./ThemeToggle"
 
 type Target = {
   id: string
@@ -110,6 +111,7 @@ export function DashboardClient({ user, initialTargets, hasCredentials, hasOTPro
             >
               Lookup
             </Link>
+            <ThemeToggle />
             <button
               onClick={() => signOut({ callbackUrl: "/login" })}
               className="text-sm text-gray-500 hover:text-gray-300 transition-colors py-2 px-2"
