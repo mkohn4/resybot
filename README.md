@@ -1,5 +1,7 @@
 # ResyBot
 
+**Live app: [resybot.vercel.app/dashboard](https://resybot.vercel.app/dashboard)**
+
 A self-hosted bot that automatically snipes hard-to-get NYC restaurant reservations on [Resy](https://resy.com) and [OpenTable](https://www.opentable.com) the moment they open. Built with Next.js 16, deployed on Vercel with a 1-minute cron job via [cron-job.org](https://cron-job.org).
 
 ## How it works
