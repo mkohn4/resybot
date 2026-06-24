@@ -113,7 +113,12 @@ export function TargetCard({
           setSnipeResult({ success: false, message: "No OpenTable guest profile — add one in settings first" })
           return
         }
-        const { firstName, lastName, phone } = await profileRes.json()
+        const { profile } = await profileRes.json()
+        if (!profile) {
+          setSnipeResult({ success: false, message: "No OpenTable guest profile — add one in settings first" })
+          return
+        }
+        const { firstName, lastName, phone } = profile
         const session = await sessionRes.json()
         const email = session?.user?.email ?? ""
         const data = await bookOTFromBrowser(

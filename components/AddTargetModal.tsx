@@ -125,7 +125,9 @@ export function AddTargetModal({
     // Fetch OT profile (has name+phone) and merge with session email
     const profileRes = await fetch("/api/ot-profile")
     if (!profileRes.ok) return { success: false, message: "No OpenTable guest profile — add one in settings first" }
-    const { firstName, lastName, phone } = await profileRes.json()
+    const { profile } = await profileRes.json()
+    if (!profile) return { success: false, message: "No OpenTable guest profile — add one in settings first" }
+    const { firstName, lastName, phone } = profile
     const emailRes = await fetch("/api/auth/session")
     const session = await emailRes.json()
     const email = session?.user?.email ?? ""
