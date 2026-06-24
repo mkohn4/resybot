@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import type { Restaurant } from "@/lib/restaurants"
 import { suggestSnipeTime } from "@/lib/restaurants"
 
-type VenueResult = Restaurant & { source?: "curated" | "resy" }
+type VenueResult = Restaurant & { source?: "curated" | "resy" | "opentable"; platform?: "resy" | "opentable" }
 
 const PREFERRED_TIMES = ["18:30", "18:45", "19:00", "19:15", "19:30", "19:45", "20:00", "20:15", "20:30", "20:45", "21:00"]
 const DEFAULT_TIMES = ["20:00", "20:15", "20:30", "19:30", "19:45", "20:45", "21:00"]
@@ -105,7 +105,7 @@ export function AddTargetModal({
         neighborhood: data.neighborhood ?? "NYC",
         cuisine: data.cuisine ?? "",
         priceRange: "",
-        daysOut: null,
+        daysOut: null as unknown as number,
         releaseTime: null,
         releaseNotes: "OpenTable — no release time data",
       } as Restaurant)
