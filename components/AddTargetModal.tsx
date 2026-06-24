@@ -52,16 +52,21 @@ export function AddTargetModal({
     }
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/venues/lookup?q=${encodeURIComponent(query)}&platform=${platform}`)
-        const data = await res.json()
-        setResults(data.results ?? [])
+        // Fetch both platforms simultaneously
+        const [resyRes, otRes] = await Promise.all([
+          fetch(`/api/venues/lookup?q=${encodeURIComponent(query)}&platform=resy`),
+          fetch(`/api/venues/lookup?q=${encodeURIComponent(query)}&platform=opentable`),
+        ])
+        const [resyData, otData] = await Promise.all([resyRes.json(), otRes.json()])
+        const combined = [...(resyData.results ?? []), ...(otData.results ?? [])]
+        setResults(combined)
         setShowDropdown(true)
       } catch {
         setResults([])
       }
     }, 300)
     return () => clearTimeout(timer)
-  }, [query, useCustom, platform])
+  }, [query, useCustom])
 
   useEffect(() => {
     if (!date || !selected) return
@@ -243,25 +248,16 @@ export function AddTargetModal({
       <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6 w-full max-w-lg shadow-2xl my-4">
         <h2 className="text-lg font-bold text-white mb-5">Add Reservation Target</h2>
 
-        {/* Platform toggle */}
-        <div className="flex gap-1 mb-4 bg-gray-800 p-1 rounded-xl">
-          <button
-            onClick={() => { setPlatform("resy"); setSelected(null); setQuery(""); setResults([]); setShowDropdown(false); setOtUrl(""); setOtUrlError("") }}
-            className={`flex-1 py-2.5 rounded-lg text-xs font-medium transition-colors ${
-              platform === "resy" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-gray-200"
-            }`}
-          >
-            Resy
-          </button>
-          <button
-            onClick={() => { setPlatform("opentable"); setSelected(null); setQuery(""); setResults([]); setShowDropdown(false); setOtUrl(""); setOtUrlError("") }}
-            className={`flex-1 py-2.5 rounded-lg text-xs font-medium transition-colors ${
-              platform === "opentable" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"
-            }`}
-          >
-            OpenTable
-          </button>
-        </div>
+        {/* Platform indicator — set automatically when selecting a result */}
+        {selected && (
+          <div className="flex gap-1 mb-4">
+            <span className={`text-xs px-2.5 py-1 rounded-lg font-medium ${
+              platform === "opentable" ? "bg-blue-500/20 text-blue-400" : "bg-gray-700 text-gray-300"
+            }`}>
+              {platform === "opentable" ? "OpenTable" : "Resy"}
+            </span>
+          </div>
+        )}
 
         {/* Mode toggle */}
         <div className="flex gap-1 mb-5 bg-gray-800 p-1 rounded-xl">
@@ -323,16 +319,30 @@ export function AddTargetModal({
                 <div className="absolute top-full left-0 right-0 mt-1 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl z-20 overflow-hidden">
                   {results.map((r) => (
                     <button
-                      key={r.venueId ?? r.name}
-                      onClick={() => selectRestaurant(r)}
+                      key={`${(r as VenueResult).platform ?? "resy"}-${r.venueId ?? r.name}`}
+                      onClick={() => {
+                        const p = (r as VenueResult).platform
+                        if (p === "opentable") setPlatform("opentable")
+                        else setPlatform("resy")
+                        selectRestaurant(r)
+                      }}
                       className="w-full text-left px-4 py-3 hover:bg-gray-700 transition-colors border-b border-gray-700 last:border-0"
                     >
-                      <div className="flex items-center justify-between">
-                        <div>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
                           <p className="text-white text-sm font-medium">{r.name}</p>
                           <p className="text-gray-400 text-xs">{r.neighborhood} · {r.cuisine}</p>
                         </div>
-                        <span className="text-gray-500 text-xs">{r.priceRange}</span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-gray-500 text-xs">{r.priceRange}</span>
+                          <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                            (r as VenueResult).platform === "opentable"
+                              ? "bg-blue-500/20 text-blue-400"
+                              : "bg-gray-600/40 text-gray-400"
+                          }`}>
+                            {(r as VenueResult).platform === "opentable" ? "OT" : "Resy"}
+                          </span>
+                        </div>
                       </div>
                     </button>
                   ))}
@@ -355,9 +365,9 @@ export function AddTargetModal({
               />
             </div>
           )}
-          {platform === "opentable" && (
+          {!useCustom && (
             <div className="mt-3 p-3 bg-gray-800/60 border border-gray-700 rounded-xl">
-              <p className="text-xs text-gray-400 font-medium mb-2">Can&apos;t find it? Paste the OpenTable URL:</p>
+              <p className="text-xs text-gray-400 font-medium mb-2">Can&apos;t find it? Paste an OpenTable URL:</p>
               <div className="flex gap-2">
                 <input
                   value={otUrl}
