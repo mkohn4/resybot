@@ -108,6 +108,8 @@ export type TargetRow = {
       encryptedLastName: string
       encryptedPhone: string
       encryptedBearerToken: string
+      encryptedCardToken: string
+      cardLast4: string
       gpid: string
       customerId: string
     } | null
@@ -233,6 +235,8 @@ async function processOTTarget(target: TargetRow) {
           phone: decrypt(profile.encryptedPhone),
           gpid: profile.gpid,
           customerId: profile.customerId,
+          cardToken: profile.encryptedCardToken ? decrypt(profile.encryptedCardToken) : "",
+          cardLast4: profile.cardLast4,
         }, bearerToken)
         const slot = best.dateTime
         await prisma.reservationTarget.update({

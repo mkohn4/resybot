@@ -15,6 +15,8 @@ export type OTSlot = {
   points?: number
   slotType?: string
   diningAreaId?: string  // actual dining area id — required for lock, varies per restaurant
+  requiresCreditCard?: boolean
+  creditCardPolicyType?: string
 }
 
 export type OTGuestInfo = {
@@ -24,29 +26,36 @@ export type OTGuestInfo = {
   phone: string
   gpid: string
   customerId: string
+  cardToken?: string   // Spreedly token from wallet.cards[].token — for CC-hold restaurants
+  cardLast4?: string
 }
 
 // Fetch user profile from OT mobile API using bearer token.
-// Used during onboarding to auto-populate name/phone/gpid/customerId.
+// Used during onboarding to auto-populate name/phone/gpid/customerId/wallet card.
 export async function fetchOTUserProfile(bearerToken: string): Promise<{
   firstName: string
   lastName: string
   phone: string
   gpid: string
   customerId: string
+  cardToken: string
+  cardLast4: string
 } | null> {
-  const res = await fetch(`${MOBILE_BASE}/api/v3/user/?loadInvitations=0`, {
+  const res = await fetch(`${MOBILE_BASE}/api/v3/user/?loadInvitations=1`, {
     headers: mobileHeaders(bearerToken),
   })
   if (!res.ok) throw new Error(`OT user fetch failed: ${res.status}`)
   const data = await res.json()
   const phone = data?.phoneNumbers?.[0]?.number ?? ""
+  const defaultCard = (data?.wallet?.cards ?? []).find((c: { default?: boolean }) => c.default) ?? data?.wallet?.cards?.[0]
   return {
     firstName: data?.firstName ?? "",
     lastName: data?.lastName ?? "",
     phone,
     gpid: data?.globalPersonId ?? "",
     customerId: String(data?.customerId ?? ""),
+    cardToken: defaultCard?.token ?? "",
+    cardLast4: defaultCard?.last4 ?? "",
   }
 }
 
@@ -78,6 +87,7 @@ export async function findOTSlots(
   // Slots live at data.availability.availability.timeslots
   const timeslots: {
     dateTime?: string; slotHash?: number | string; token?: string; available?: boolean; type?: string; points?: number
+    requiresCreditCard?: boolean; creditCardPolicyType?: string
     diningAreas?: { id?: string; environment?: string; availableAttributes?: string[] }[]
   }[] = data?.availability?.availability?.timeslots ?? []
 
@@ -98,6 +108,8 @@ export async function findOTSlots(
       points: slot.points ?? 100,
       slotType: slot.type ?? "Standard",
       diningAreaId,
+      requiresCreditCard: slot.requiresCreditCard ?? false,
+      creditCardPolicyType: slot.creditCardPolicyType,
     })
   }
   return slots
@@ -136,21 +148,32 @@ export async function bookOTSlot(
   guest: OTGuestInfo,
   bearerToken: string
 ): Promise<{ reservationId: string; confirmationNumber: string }> {
+  const needsCC = slot.requiresCreditCard && slot.creditCardPolicyType === "HOLD"
+  if (needsCC && !guest.cardToken) {
+    throw new Error("This restaurant requires a credit card hold. Reconnect your OpenTable account to add your saved card.")
+  }
+
   // Step 1: lock the slot
+  const lockBody: Record<string, unknown> = {
+    dateTime: slot.dateTime,
+    partySize,
+    hash: slot.slotHash,
+    intendedPoints: slot.points ?? 100,
+    intendedPointsType: slot.slotType ?? "Standard",
+    hasAccessRuleDiningAttribute: false,
+    userLocation: { countryCode: "US", regionCode: "NY" },
+    attribution: { partnerId: "84" },
+    selectedDiningArea: { tableAttribute: "default", diningAreaId: slot.diningAreaId ?? "1" },
+  }
+  if (needsCC) {
+    lockBody.requiresCreditCard = true
+    lockBody.creditCardPolicyType = slot.creditCardPolicyType
+  }
+
   const lockRes = await fetch(`${MOBILE_BASE}/api/v1/reservation/${restaurantId}/lock`, {
     method: "POST",
     headers: mobileHeaders(bearerToken),
-    body: JSON.stringify({
-      dateTime: slot.dateTime,
-      partySize,
-      hash: slot.slotHash,
-      intendedPoints: slot.points ?? 100,
-      intendedPointsType: slot.slotType ?? "Standard",
-      hasAccessRuleDiningAttribute: false,
-      userLocation: { countryCode: "US", regionCode: "NY" },
-      attribution: { partnerId: "84" },
-      selectedDiningArea: { tableAttribute: "default", diningAreaId: slot.diningAreaId ?? "1" },
-    }),
+    body: JSON.stringify(lockBody),
   })
   if (!lockRes.ok) {
     const err = await lockRes.text()
@@ -161,30 +184,40 @@ export async function bookOTSlot(
   if (!lockId) throw new Error("OT lock returned no id")
 
   // Step 2: complete the reservation
+  const bookBody: Record<string, unknown> = {
+    partySize,
+    dateTime: slot.dateTime,
+    hash: slot.slotHash,
+    slotAvailabilityToken: slot.token,
+    lockId,
+    gpid: guest.gpid,
+    dinerId: guest.customerId,
+    number: guest.phone.replace(/\D/g, ""),
+    countryId: "US",
+    notes: "",
+    type: slot.slotType ?? "Standard",
+    points: slot.points ?? 100,
+    loadInvitations: false,
+    hasAccessRuleDiningAttribute: false,
+    diningFormOptIn: false,
+    loyaltyProgramOptIn: true,
+    smsOptIn: true,
+    attribution: { partnerId: "84" },
+    selectedDiningArea: { tableAttribute: "default", diningAreaId: slot.diningAreaId ?? "1" },
+    location: { latitude: 40.74, longitude: -73.98 },
+  }
+  if (needsCC) {
+    bookBody.creditCardLock = {
+      customerId: guest.cardToken,
+      paymentProviderType: "SPREEDLY",
+      last4: guest.cardLast4,
+    }
+  }
+
   const bookRes = await fetch(`${MOBILE_BASE}/api/v3/reservation/${restaurantId}`, {
     method: "POST",
     headers: mobileHeaders(bearerToken),
-    body: JSON.stringify({
-      partySize,
-      dateTime: slot.dateTime,
-      hash: slot.slotHash,
-      slotAvailabilityToken: slot.token,
-      lockId,
-      gpid: guest.gpid,
-      dinerId: guest.customerId,
-      number: guest.phone.replace(/\D/g, ""),
-      countryId: "US",
-      notes: "",
-      type: slot.slotType ?? "Standard",
-      points: slot.points ?? 100,
-      loadInvitations: false,
-      hasAccessRuleDiningAttribute: false,
-      diningFormOptIn: false,
-      loyaltyProgramOptIn: true,
-      attribution: { partnerId: "84" },
-      selectedDiningArea: { tableAttribute: "default", diningAreaId: slot.diningAreaId ?? "1" },
-      location: { latitude: 40.74, longitude: -73.98 },
-    }),
+    body: JSON.stringify(bookBody),
   })
   if (!bookRes.ok) {
     const err = await bookRes.text()

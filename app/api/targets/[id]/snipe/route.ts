@@ -141,6 +141,8 @@ async function handleOTSnipe({ id, target, dateStr, stillFuture, userId }: {
       phone: decrypt(profile.encryptedPhone),
       gpid: profile.gpid,
       customerId: profile.customerId,
+      cardToken: profile.encryptedCardToken ? decrypt(profile.encryptedCardToken) : "",
+      cardLast4: profile.cardLast4,
     }, bearerToken)
     const slot = best.dateTime
     const time = slot.split("T")[1]?.substring(0, 5) ?? ""

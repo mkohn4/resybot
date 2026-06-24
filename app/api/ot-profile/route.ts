@@ -18,6 +18,7 @@ export async function GET() {
       phone: profile.encryptedPhone ? decrypt(profile.encryptedPhone) : "",
       gpid: profile.gpid,
       customerId: profile.customerId,
+      cardLast4: profile.cardLast4,
     },
   })
 }
@@ -50,6 +51,8 @@ export async function POST(req: NextRequest) {
       encryptedLastName: encrypt(otUser.lastName),
       encryptedPhone: encrypt(otUser.phone),
       encryptedBearerToken: encrypt(bearerToken),
+      encryptedCardToken: otUser.cardToken ? encrypt(otUser.cardToken) : "",
+      cardLast4: otUser.cardLast4,
       gpid: otUser.gpid,
       customerId: otUser.customerId,
     },
@@ -59,6 +62,8 @@ export async function POST(req: NextRequest) {
       encryptedLastName: encrypt(otUser.lastName),
       encryptedPhone: encrypt(otUser.phone),
       encryptedBearerToken: encrypt(bearerToken),
+      encryptedCardToken: otUser.cardToken ? encrypt(otUser.cardToken) : "",
+      cardLast4: otUser.cardLast4,
       gpid: otUser.gpid,
       customerId: otUser.customerId,
     },
@@ -71,6 +76,7 @@ export async function POST(req: NextRequest) {
       phone: decrypt(profile.encryptedPhone),
       gpid: profile.gpid,
       customerId: profile.customerId,
+      cardLast4: profile.cardLast4,
     },
   })
 }

@@ -98,6 +98,8 @@ model OTGuestProfile {
   encryptedLastName    String
   encryptedPhone       String
   encryptedBearerToken String
+  encryptedCardToken   String   @default("")
+  cardLast4            String   @default("")
   gpid                 String
   customerId           String
   createdAt            DateTime @default(now())
