@@ -186,10 +186,50 @@ export async function searchOTVenues(query: string): Promise<{
 
   if (!res.ok) return []
   const data = await res.json()
-  const results = data?.data?.autocomplete?.autocompleteResults ?? []
-  return results
-    .filter((r: { type?: string }) => r.type === "Restaurant")
-    .map((r: { id?: number; name?: string; country?: string; metroName?: string; neighborhoodName?: string; cuisineList?: string[] }) => ({
+  // Try both old and new response shapes
+  const results =
+    data?.data?.autocomplete?.autocompleteResults ??
+    data?.data?.autocomplete?.restaurants ??
+    data?.data?.restaurants ??
+    []
+  const autocompleteHits = results
+    // Keep anything that looks like a restaurant (has a numeric id) — don't filter by `type`
+    // because OT returns different type strings across API versions
+    .filter((r: { id?: number; name?: string }) => r.id && r.name)
+    .map((r: { id?: number; name?: string; metroName?: string; neighborhoodName?: string; cuisineList?: string[] }) => ({
+      id: r.id ?? 0,
+      name: r.name ?? "Unknown",
+      neighborhood: r.neighborhoodName ?? r.metroName ?? "NYC",
+      cuisine: r.cuisineList?.[0] ?? "",
+      city: r.metroName ?? "New York",
+    }))
+
+  if (autocompleteHits.length > 0) return autocompleteHits
+
+  // Retry with useNewVersion: false — some restaurants only appear in the legacy index
+  const res2 = await fetch(`${GQL_URL}?optype=query&opname=Autocomplete`, {
+    method: "POST",
+    headers: makeHeaders(),
+    body: JSON.stringify({
+      operationName: "Autocomplete",
+      variables: { term: query, latitude: 40.758, longitude: -73.9855, useNewVersion: false },
+      extensions: {
+        persistedQuery: {
+          version: 1,
+          sha256Hash: "3cabca79abcb0db395d3cbebb4d47d41f3ddd69442eba3a57f76b943cceb8cf4",
+        },
+      },
+    }),
+  })
+  if (!res2.ok) return []
+  const data2 = await res2.json()
+  const results2 =
+    data2?.data?.autocomplete?.autocompleteResults ??
+    data2?.data?.autocomplete?.restaurants ??
+    []
+  return results2
+    .filter((r: { id?: number; name?: string }) => r.id && r.name)
+    .map((r: { id?: number; name?: string; metroName?: string; neighborhoodName?: string; cuisineList?: string[] }) => ({
       id: r.id ?? 0,
       name: r.name ?? "Unknown",
       neighborhood: r.neighborhoodName ?? r.metroName ?? "NYC",
