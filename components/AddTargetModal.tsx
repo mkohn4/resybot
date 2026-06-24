@@ -6,7 +6,9 @@ import { suggestSnipeTime } from "@/lib/restaurants"
 
 type VenueResult = Restaurant & { source?: "curated" | "resy" | "opentable"; platform?: "resy" | "opentable" }
 
-const PREFERRED_TIMES = ["18:30", "18:45", "19:00", "19:15", "19:30", "19:45", "20:00", "20:15", "20:30", "20:45", "21:00"]
+const LUNCH_TIMES   = ["11:30", "11:45", "12:00", "12:15", "12:30", "12:45", "13:00", "13:15", "13:30"]
+const DINNER_TIMES  = ["17:30", "17:45", "18:00", "18:15", "18:30", "18:45", "19:00", "19:15", "19:30", "19:45", "20:00", "20:15", "20:30", "20:45", "21:00", "21:15", "21:30", "21:45", "22:00", "22:15", "22:30"]
+const PREFERRED_TIMES = [...LUNCH_TIMES, ...DINNER_TIMES]
 const DEFAULT_TIMES = ["20:00", "20:15", "20:30", "19:30", "19:45", "20:45", "21:00"]
 
 type Mode = "scheduled" | "now" | "watch"
@@ -435,23 +437,28 @@ export function AddTargetModal({
         {/* Preferred times */}
         <div className="mb-4">
           <label className="text-sm text-gray-400 mb-1.5 block">Preferred Times</label>
-          <div className="flex flex-wrap gap-2">
-            {PREFERRED_TIMES.map((t) => {
-              const [h, m] = t.split(":").map(Number)
-              const label = `${h > 12 ? h - 12 : h}:${m.toString().padStart(2, "0")}${h >= 12 ? "pm" : "am"}`
-              return (
-                <button
-                  key={t}
-                  onClick={() => toggleTime(t)}
-                  className={`px-3 py-2.5 rounded-lg text-xs font-medium transition-colors ${
-                    preferredTimes.includes(t) ? "bg-emerald-600 text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
-                  }`}
-                >
-                  {label}
-                </button>
-              )
-            })}
-          </div>
+          {[{ label: "Lunch", times: LUNCH_TIMES }, { label: "Dinner", times: DINNER_TIMES }].map(({ label, times }) => (
+            <div key={label} className="mb-2">
+              <p className="text-xs text-gray-600 uppercase tracking-wider mb-1.5">{label}</p>
+              <div className="flex flex-wrap gap-2">
+                {times.map((t) => {
+                  const [h, m] = t.split(":").map(Number)
+                  const label12 = `${h > 12 ? h - 12 : h === 0 ? 12 : h}:${m.toString().padStart(2, "0")}${h >= 12 ? "pm" : "am"}`
+                  return (
+                    <button
+                      key={t}
+                      onClick={() => toggleTime(t)}
+                      className={`px-3 py-2.5 rounded-lg text-xs font-medium transition-colors ${
+                        preferredTimes.includes(t) ? "bg-emerald-600 text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                      }`}
+                    >
+                      {label12}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </div>
 
         {/* Snipe time — only for scheduled mode */}
