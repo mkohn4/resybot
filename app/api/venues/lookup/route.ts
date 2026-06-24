@@ -10,24 +10,26 @@ export async function GET(req: NextRequest) {
   const platformFilter = req.nextUrl.searchParams.get("platform") // "resy" | "opentable" | null (both)
   if (q.length < 2) return NextResponse.json({ results: [] })
 
-  // Search curated list (Resy)
-  const curated = NYC_RESTAURANTS.filter(
-    (r) =>
-      r.name.toLowerCase().includes(q.toLowerCase()) ||
-      r.neighborhood.toLowerCase().includes(q.toLowerCase()) ||
-      r.cuisine.toLowerCase().includes(q.toLowerCase())
-  ).map((r) => ({
-    venueId: r.venueId,
-    name: r.name,
-    neighborhood: r.neighborhood,
-    cuisine: r.cuisine,
-    priceRange: r.priceRange,
-    daysOut: r.daysOut,
-    releaseTime: r.releaseTime,
-    releaseNotes: r.releaseNotes,
-    platform: "resy" as const,
-    source: "curated" as const,
-  }))
+  // Search curated list (Resy only)
+  const curated = (!platformFilter || platformFilter === "resy")
+    ? NYC_RESTAURANTS.filter(
+        (r) =>
+          r.name.toLowerCase().includes(q.toLowerCase()) ||
+          r.neighborhood.toLowerCase().includes(q.toLowerCase()) ||
+          r.cuisine.toLowerCase().includes(q.toLowerCase())
+      ).map((r) => ({
+        venueId: r.venueId,
+        name: r.name,
+        neighborhood: r.neighborhood,
+        cuisine: r.cuisine,
+        priceRange: r.priceRange,
+        daysOut: r.daysOut,
+        releaseTime: r.releaseTime,
+        releaseNotes: r.releaseNotes,
+        platform: "resy" as const,
+        source: "curated" as const,
+      }))
+    : []
 
   // Search Resy live
   let resyResults: typeof curated = []
