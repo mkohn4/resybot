@@ -97,7 +97,7 @@ async function handleResySnipe({ id, target, dateStr, stillFuture, userId }: {
     await prisma.reservationTarget.update({ where: { id }, data: stillFuture ? { status: "WATCHING", mode: "WATCH" } : { status: "FAILED" } })
     await prisma.snipeAttempt.create({ data: { targetId: id, success: false, error } })
     if (target.notificationEmail) {
-      await sendBookingFailed({ to: target.notificationEmail, restaurantName: target.venueName, date: dateStr, error }).catch(() => {})
+      await sendBookingFailed({ to: target.notificationEmail, restaurantName: target.venueName, date: dateStr, error, platform: "RESY" }).catch(() => {})
     }
     return NextResponse.json({ success: false, message: error }, { status: 500 })
   }
@@ -152,7 +152,7 @@ async function handleOTSnipe({ id, target, dateStr, stillFuture, userId }: {
     await prisma.reservationTarget.update({ where: { id }, data: stillFuture ? { status: "WATCHING", mode: "WATCH" } : { status: "FAILED" } })
     await prisma.snipeAttempt.create({ data: { targetId: id, success: false, error } })
     if (target.notificationEmail) {
-      await sendBookingFailed({ to: target.notificationEmail, restaurantName: target.venueName, date: dateStr, error }).catch(() => {})
+      await sendBookingFailed({ to: target.notificationEmail, restaurantName: target.venueName, date: dateStr, error, platform: "OPENTABLE" }).catch(() => {})
     }
     return NextResponse.json({ success: false, message: error }, { status: 500 })
   }

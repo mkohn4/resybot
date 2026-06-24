@@ -34,8 +34,10 @@ export async function sendBookingFailed(opts: {
   restaurantName: string
   date: string
   error: string
+  platform?: string
 }) {
-  const { to, restaurantName, date, error } = opts
+  const { to, restaurantName, date, error, platform } = opts
+  const isOT = platform === "OPENTABLE"
   await resend().emails.send({
     from: FROM,
     to,
@@ -45,7 +47,7 @@ export async function sendBookingFailed(opts: {
       <p><strong>Restaurant:</strong> ${restaurantName}</p>
       <p><strong>Date:</strong> ${date}</p>
       <p><strong>Reason:</strong> ${error}</p>
-      <p>No slots matched your preferences in the sniping window. You can try again manually on Resy.</p>
+      <p>No slots matched your preferences. You can try again manually on ${isOT ? "OpenTable" : "Resy"}.</p>
     `,
   })
 }

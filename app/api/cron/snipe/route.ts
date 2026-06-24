@@ -18,11 +18,13 @@ export async function GET(req: NextRequest) {
     // Neon HTTP adapter doesn't support OR clauses (triggers implicit transactions)
     // Run two separate queries and merge
     const [snipeTargets, watchTargets] = await Promise.all([
+      // OT SNIPE targets are also excluded — availability checks must come from a browser
       prisma.reservationTarget.findMany({
-        where: { status: "PENDING", mode: "SNIPE", snipeAt: { gte: twoMinsAgo, lte: now } },
+        where: { status: "PENDING", mode: "SNIPE", snipeAt: { gte: twoMinsAgo, lte: now }, platform: "RESY" },
       }),
+      // OT WATCH targets are handled client-side (browser) — skip here to avoid 403s
       prisma.reservationTarget.findMany({
-        where: { status: "WATCHING", mode: "WATCH", date: { gte: now } },
+        where: { status: "WATCHING", mode: "WATCH", date: { gte: now }, platform: "RESY" },
       }),
     ])
     const targets = [...snipeTargets, ...watchTargets]
@@ -278,6 +280,7 @@ async function fallbackOrFail(target: TargetRow, lastError: string) {
       restaurantName: target.venueName,
       date: dateStr,
       error: lastError || "No matching slots in your preferred time range",
+      platform: target.platform,
     }).catch(() => {})
   }
 
