@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback } from "react"
 import { signOut } from "next-auth/react"
 import Link from "next/link"
 import { AddTargetModal } from "./AddTargetModal"
 import { CredentialsModal } from "./CredentialsModal"
 import { OTProfileModal } from "./OTProfileModal"
 import { TargetCard } from "./TargetCard"
+import { useOTWatcher } from "@/lib/useOTWatcher"
 
 type Target = {
   id: string
@@ -46,6 +47,14 @@ export function DashboardClient({ user, initialTargets, hasCredentials, hasOTPro
     const data = await res.json()
     setTargets(data)
   }
+
+  const handleOTBooked = useCallback((id: string, slot: string) => {
+    setTargets((prev) =>
+      prev.map((t) => t.id === id ? { ...t, status: "BOOKED", bookedSlot: slot } : t)
+    )
+  }, [])
+
+  useOTWatcher(targets, handleOTBooked)
 
   async function deleteTarget(id: string) {
     await fetch(`/api/targets/${id}`, { method: "DELETE" })

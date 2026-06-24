@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import type { Restaurant } from "@/lib/restaurants"
 import { suggestSnipeTime } from "@/lib/restaurants"
+import { pickBestOTSlot } from "@/lib/opentable"
 
 type VenueResult = Restaurant & { source?: "curated" | "resy" | "opentable"; platform?: "resy" | "opentable" }
 
@@ -120,6 +121,52 @@ export function AddTargetModal({
     }
   }
 
+  async function bookOTFromBrowser(targetId: string, venueId: number, date: string, partySize: number, preferredTimes: string[]) {
+    try {
+      const res = await fetch(
+        `https://www.opentable.com/dapi/fe/gql?optype=query&opname=RestaurantsAvailability`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            accept: "*/*",
+            origin: "https://www.opentable.com",
+            referer: "https://www.opentable.com/",
+            "x-csrf-token": crypto.randomUUID(),
+          },
+          body: JSON.stringify({
+            operationName: "RestaurantsAvailability",
+            variables: { restaurantIds: [venueId], date, time: "19:00", partySize, databaseRegion: "NA", onlyPop: false, forwardDays: 0, requireTimes: false, requireTypes: [] },
+            extensions: { persistedQuery: { version: 1, sha256Hash: "e6b87021ed6e865a7778aa39d35d09864c1be29c683c707602dd3de43c854d86" } },
+          }),
+        }
+      )
+      if (!res.ok) return { success: false, message: `OT availability check failed: ${res.status}` }
+      const data = await res.json()
+      const slots: { dateTime: string; slotHash: string; slotAvailabilityToken: string; timeOffsetMinutes: number }[] = []
+      for (const venue of data?.data?.availability ?? []) {
+        for (const day of venue.availabilityDays ?? []) {
+          for (const slot of day.slots ?? []) {
+            if (!slot.isAvailable) continue
+            const offsetMins = slot.timeOffsetMinutes ?? 0
+            const h = Math.floor(offsetMins / 60), m = offsetMins % 60
+            slots.push({ dateTime: `${date}T${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:00`, slotHash: slot.slotHash, slotAvailabilityToken: slot.slotAvailabilityToken, timeOffsetMinutes: offsetMins })
+          }
+        }
+      }
+      const best = pickBestOTSlot(slots, preferredTimes)
+      if (!best) return { success: false, fallbackToWatch: true, message: "No slots in your preferred times right now" }
+      const bookRes = await fetch(`/api/targets/${targetId}/ot-book`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slot: best }),
+      })
+      return await bookRes.json()
+    } catch (err: unknown) {
+      return { success: false, message: err instanceof Error ? err.message : "OT booking failed" }
+    }
+  }
+
   function toggleTime(t: string) {
     setPreferredTimes((prev) =>
       prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]
@@ -175,13 +222,24 @@ export function AddTargetModal({
       if (!res.ok) throw new Error(target.error ?? "Failed to add target")
 
       if (mode === "now") {
-        const snipeRes = await fetch(`/api/targets/${target.id}/snipe`, { method: "POST" })
-        const snipeData = await snipeRes.json()
-        setNowResult(snipeData)
-        if (snipeData.success) {
-          onAdded({ ...target, status: "BOOKED", bookedSlot: snipeData.slot })
+        if (platform === "opentable") {
+          // OT availability must be checked from the browser (datacenter IPs are blocked)
+          const snipeData = await bookOTFromBrowser(target.id, Number(venueId), date, partySize, preferredTimes)
+          setNowResult(snipeData)
+          if (snipeData.success) {
+            onAdded({ ...target, status: "BOOKED", bookedSlot: snipeData.slot })
+          } else {
+            onAdded({ ...target, status: "PENDING" })
+          }
         } else {
-          onAdded({ ...target, status: "PENDING" })
+          const snipeRes = await fetch(`/api/targets/${target.id}/snipe`, { method: "POST" })
+          const snipeData = await snipeRes.json()
+          setNowResult(snipeData)
+          if (snipeData.success) {
+            onAdded({ ...target, status: "BOOKED", bookedSlot: snipeData.slot })
+          } else {
+            onAdded({ ...target, status: "PENDING" })
+          }
         }
       } else {
         onAdded(target)

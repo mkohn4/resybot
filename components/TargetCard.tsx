@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { pickBestOTSlot } from "@/lib/opentable"
 
 type Attempt = {
   id: string
@@ -101,10 +102,58 @@ export function TargetCard({
     setSniping(true)
     setSnipeResult(null)
     try {
-      const res = await fetch(`/api/targets/${target.id}/snipe`, { method: "POST" })
-      const data = await res.json()
-      setSnipeResult(data)
-      if (data.success) onRefresh()
+      if (target.platform === "OPENTABLE") {
+        // OT availability must come from browser (datacenter IPs blocked by Akamai)
+        const dateStr = new Date(target.date).toISOString().split("T")[0]
+        const availRes = await fetch(
+          `https://www.opentable.com/dapi/fe/gql?optype=query&opname=RestaurantsAvailability`,
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              accept: "*/*",
+              origin: "https://www.opentable.com",
+              referer: "https://www.opentable.com/",
+              "x-csrf-token": crypto.randomUUID(),
+            },
+            body: JSON.stringify({
+              operationName: "RestaurantsAvailability",
+              variables: { restaurantIds: [target.venueId], date: dateStr, time: "19:00", partySize: target.partySize, databaseRegion: "NA", onlyPop: false, forwardDays: 0, requireTimes: false, requireTypes: [] },
+              extensions: { persistedQuery: { version: 1, sha256Hash: "e6b87021ed6e865a7778aa39d35d09864c1be29c683c707602dd3de43c854d86" } },
+            }),
+          }
+        )
+        const availData = await availRes.json()
+        const slots: { dateTime: string; slotHash: string; slotAvailabilityToken: string; timeOffsetMinutes: number }[] = []
+        for (const venue of availData?.data?.availability ?? []) {
+          for (const day of venue.availabilityDays ?? []) {
+            for (const slot of day.slots ?? []) {
+              if (!slot.isAvailable) continue
+              const offsetMins = slot.timeOffsetMinutes ?? 0
+              const h = Math.floor(offsetMins / 60), m = offsetMins % 60
+              slots.push({ dateTime: `${dateStr}T${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:00`, slotHash: slot.slotHash, slotAvailabilityToken: slot.slotAvailabilityToken, timeOffsetMinutes: offsetMins })
+            }
+          }
+        }
+        const best = pickBestOTSlot(slots, target.preferredTimes)
+        if (!best) {
+          setSnipeResult({ success: false, fallbackToWatch: true, message: "No slots in your preferred times right now" })
+          return
+        }
+        const bookRes = await fetch(`/api/targets/${target.id}/ot-book`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ slot: best }),
+        })
+        const data = await bookRes.json()
+        setSnipeResult(data)
+        if (data.success) onRefresh()
+      } else {
+        const res = await fetch(`/api/targets/${target.id}/snipe`, { method: "POST" })
+        const data = await res.json()
+        setSnipeResult(data)
+        if (data.success) onRefresh()
+      }
     } catch {
       setSnipeResult({ success: false, message: "Request failed" })
     } finally {
@@ -135,7 +184,10 @@ export function TargetCard({
           {target.status === "BOOKED" && bookedTime && (
             <p className="text-emerald-400 text-xs font-medium mt-1">Reserved at {bookedTime} ✓</p>
           )}
-          {target.status === "WATCHING" && (
+          {target.status === "WATCHING" && target.platform === "OPENTABLE" && (
+            <p className="text-amber-400/70 text-xs mt-1">Checking from your browser every minute — keep this page open</p>
+          )}
+          {target.status === "WATCHING" && target.platform !== "OPENTABLE" && (
             <p className="text-amber-400/70 text-xs mt-1">Checking every minute for cancellations until {reservationDate}</p>
           )}
           {target.status !== "BOOKED" && target.status !== "WATCHING" && (
