@@ -23,7 +23,6 @@ export default async function DashboardPage() {
       initialTargets={targets}
       hasCredentials={!!credential}
       hasOTProfile={!!otProfile}
-      otProfile={otProfile ? { firstName: otProfile.firstName, lastName: otProfile.lastName, phone: otProfile.phone, email: session.user.email ?? "" } : null}
     />
   )
 }

@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { bookOTFromBrowser } from "@/lib/useOTWatcher"
 
 type Attempt = {
   id: string
@@ -102,37 +101,10 @@ export function TargetCard({
     setSniping(true)
     setSnipeResult(null)
     try {
-      if (target.platform === "OPENTABLE") {
-        const dateStr = new Date(target.date).toISOString().split("T")[0]
-        // Fetch profile for name/phone, get email from session
-        const [profileRes, sessionRes] = await Promise.all([
-          fetch("/api/ot-profile"),
-          fetch("/api/auth/session"),
-        ])
-        if (!profileRes.ok) {
-          setSnipeResult({ success: false, message: "No OpenTable guest profile — add one in settings first" })
-          return
-        }
-        const { profile } = await profileRes.json()
-        if (!profile) {
-          setSnipeResult({ success: false, message: "No OpenTable guest profile — add one in settings first" })
-          return
-        }
-        const { firstName, lastName, phone } = profile
-        const session = await sessionRes.json()
-        const email = session?.user?.email ?? ""
-        const data = await bookOTFromBrowser(
-          target.id, target.venueId, dateStr, target.partySize, target.preferredTimes,
-          { firstName, lastName, phone, email }
-        )
-        setSnipeResult(data)
-        if (data.success) onRefresh()
-      } else {
-        const res = await fetch(`/api/targets/${target.id}/snipe`, { method: "POST" })
-        const data = await res.json()
-        setSnipeResult(data)
-        if (data.success) onRefresh()
-      }
+      const res = await fetch(`/api/targets/${target.id}/snipe`, { method: "POST" })
+      const data = await res.json()
+      setSnipeResult(data)
+      if (data.success) onRefresh()
     } catch {
       setSnipeResult({ success: false, message: "Request failed" })
     } finally {
@@ -163,10 +135,7 @@ export function TargetCard({
           {target.status === "BOOKED" && bookedTime && (
             <p className="text-emerald-400 text-xs font-medium mt-1">Reserved at {bookedTime} ✓</p>
           )}
-          {target.status === "WATCHING" && target.platform === "OPENTABLE" && (
-            <p className="text-amber-400/70 text-xs mt-1">Checking from your browser every minute — keep this page open</p>
-          )}
-          {target.status === "WATCHING" && target.platform !== "OPENTABLE" && (
+          {target.status === "WATCHING" && (
             <p className="text-amber-400/70 text-xs mt-1">Checking every minute for cancellations until {reservationDate}</p>
           )}
           {target.status !== "BOOKED" && target.status !== "WATCHING" && (

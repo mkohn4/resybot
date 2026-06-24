@@ -111,12 +111,14 @@ async function handleOTSnipe({ id, target, dateStr, stillFuture, userId }: {
   userId: string
 }) {
   const profile = await prisma.oTGuestProfile.findUnique({ where: { userId } })
-  if (!profile) return NextResponse.json({ error: "No OpenTable guest profile on file — add your name and phone in settings" }, { status: 400 })
+  if (!profile) return NextResponse.json({ error: "No OpenTable profile on file — connect your account in settings" }, { status: 400 })
+  if (!profile.encryptedBearerToken) return NextResponse.json({ error: "No OpenTable Bearer token on file — reconnect your account" }, { status: 400 })
 
+  const bearerToken = decrypt(profile.encryptedBearerToken)
   const guestEmail = target.notificationEmail ?? ""
 
   try {
-    const slots = await findOTSlots(target.venueId, dateStr, target.partySize)
+    const slots = await findOTSlots(target.venueId, dateStr, target.partySize, bearerToken)
     const best = pickBestOTSlot(slots, target.preferredTimes)
 
     if (!best) {
@@ -132,12 +134,14 @@ async function handleOTSnipe({ id, target, dateStr, stillFuture, userId }: {
       })
     }
 
-    await bookOTSlot(target.venueId, best, dateStr, target.partySize, {
+    await bookOTSlot(target.venueId, best, target.partySize, {
       firstName: profile.firstName,
       lastName: profile.lastName,
       email: guestEmail,
       phone: profile.phone,
-    })
+      gpid: profile.gpid,
+      customerId: profile.customerId,
+    }, bearerToken)
     const slot = best.dateTime
     const time = slot.split("T")[1]?.substring(0, 5) ?? ""
 

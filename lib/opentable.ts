@@ -1,28 +1,18 @@
-const DAPI_BASE = "https://www.opentable.com/dapi"
+const MOBILE_BASE = "https://mobile-api.opentable.com"
 const GQL_URL = "https://www.opentable.com/dapi/fe/gql"
 
-function makeHeaders() {
-  // OT uses double-submit CSRF: token must match the session cookie.
-  // Server-side we have no session cookie, so generate a fresh UUID each request
-  // to avoid 409 Conflict from a stale token referencing a dead session.
-  const csrf = crypto.randomUUID()
+function mobileHeaders(bearerToken: string) {
   return {
-    "content-type": "application/json",
-    accept: "*/*",
-    origin: "https://www.opentable.com",
-    referer: "https://www.opentable.com/",
-    "x-csrf-token": csrf,
-    cookie: `OT-SessionId=${crypto.randomUUID()}`,
-    "user-agent":
-      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${bearerToken}`,
+    "User-Agent": "com.contextoptional.OpenTable/26.17.0.6; iPhone; iOS/26.5; 3.0;",
   }
 }
 
 export type OTSlot = {
-  dateTime: string       // "2024-03-15T19:30:00"
+  dateTime: string   // "2026-06-28T20:00"
   slotHash: string
-  slotAvailabilityToken: string
-  timeOffsetMinutes: number
+  token: string      // slotAvailabilityToken
 }
 
 export type OTGuestInfo = {
@@ -30,58 +20,66 @@ export type OTGuestInfo = {
   lastName: string
   email: string
   phone: string
+  gpid: string
+  customerId: string
+}
+
+// Fetch user profile from OT mobile API using bearer token.
+// Used during onboarding to auto-populate name/phone/gpid/customerId.
+export async function fetchOTUserProfile(bearerToken: string): Promise<{
+  firstName: string
+  lastName: string
+  phone: string
+  gpid: string
+  customerId: string
+} | null> {
+  const res = await fetch(`${MOBILE_BASE}/api/v3/user/?loadInvitations=0`, {
+    headers: mobileHeaders(bearerToken),
+  })
+  if (!res.ok) throw new Error(`OT user fetch failed: ${res.status}`)
+  const data = await res.json()
+  const phone = data?.phoneNumbers?.[0]?.number ?? ""
+  return {
+    firstName: data?.firstName ?? "",
+    lastName: data?.lastName ?? "",
+    phone,
+    gpid: data?.globalPersonId ?? "",
+    customerId: String(data?.customerId ?? ""),
+  }
 }
 
 export async function findOTSlots(
   restaurantId: number,
-  date: string, // YYYY-MM-DD
-  partySize: number
+  date: string,   // YYYY-MM-DD
+  partySize: number,
+  bearerToken: string
 ): Promise<OTSlot[]> {
-  const res = await fetch(`${GQL_URL}?optype=query&opname=RestaurantsAvailability`, {
-    method: "POST",
-    headers: makeHeaders(),
-    body: JSON.stringify({
-      operationName: "RestaurantsAvailability",
-      variables: {
-        restaurantIds: [restaurantId],
-        date,
-        time: "19:00",
-        partySize,
-        databaseRegion: "NA",
-        onlyPop: false,
-        forwardDays: 0,
-        requireTimes: false,
-        requireTypes: [],
-      },
-      extensions: {
-        persistedQuery: {
-          version: 1,
-          sha256Hash: "e6b87021ed6e865a7778aa39d35d09864c1be29c683c707602dd3de43c854d86",
-        },
-      },
-    }),
-  })
+  const dateTime = `${date}T19:00`
+  const url = new URL(`${MOBILE_BASE}/api/v3/restaurant/${restaurantId}`)
+  url.searchParams.set("dateTime", dateTime)
+  url.searchParams.set("partySize", String(partySize))
+  url.searchParams.set("forceNextAvailable", "true")
+  url.searchParams.set("includeNextAvailable", "true")
+  url.searchParams.set("allowPop", "true")
+  url.searchParams.set("includeOffers", "true")
+  url.searchParams.set("requestTicket", "true")
+  url.searchParams.set("requestAttributeTables", "true")
+  url.searchParams.set("stats", "numBooked")
+  url.searchParams.set("partnerId", "84")
 
+  const res = await fetch(url.toString(), { headers: mobileHeaders(bearerToken) })
   if (!res.ok) throw new Error(`OT findSlots failed: ${res.status}`)
   const data = await res.json()
 
   const slots: OTSlot[] = []
-  const availability = data?.data?.availability ?? []
-  for (const venue of availability) {
-    for (const day of venue.availabilityDays ?? []) {
-      for (const slot of day.slots ?? []) {
-        if (!slot.isAvailable) continue
-        // dateTime assembled from date + slot offset
-        const offsetMins = slot.timeOffsetMinutes ?? 0
-        const [h, m] = [Math.floor(offsetMins / 60), offsetMins % 60]
-        const timeStr = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`
-        slots.push({
-          dateTime: `${date}T${timeStr}`,
-          slotHash: slot.slotHash,
-          slotAvailabilityToken: slot.slotAvailabilityToken,
-          timeOffsetMinutes: offsetMins,
-        })
-      }
+  for (const day of data?.suggestedAvailability ?? []) {
+    for (const slot of day?.timeslots ?? []) {
+      if (!slot.dateTime || !slot.slotHash) continue
+      slots.push({
+        dateTime: slot.dateTime,
+        slotHash: String(slot.slotHash),
+        token: slot.token ?? slot.slotAvailabilityToken ?? "",
+      })
     }
   }
   return slots
@@ -89,7 +87,7 @@ export async function findOTSlots(
 
 export function pickBestOTSlot(
   slots: OTSlot[],
-  preferredTimes: string[] // ["20:00", "20:15", ...]
+  preferredTimes: string[]
 ): OTSlot | null {
   const slotByTime: Record<string, OTSlot> = {}
   for (const slot of slots) {
@@ -97,12 +95,11 @@ export function pickBestOTSlot(
     if (time) slotByTime[time] = slot
   }
 
-  // Try preferred times in order
   for (const t of preferredTimes) {
     if (slotByTime[t]) return slotByTime[t]
   }
 
-  // Fallback: first slot in 6:30pm–9pm window
+  // Fallback: first slot in lunch (11:30–13:30) or dinner (17:30–22:30) window
   for (const slot of slots) {
     const time = slot.dateTime.split("T")[1]?.substring(0, 5)
     if (!time) continue
@@ -114,65 +111,66 @@ export function pickBestOTSlot(
   return null
 }
 
-// Exported so the browser can POST directly to OT (avoids datacenter IP block).
-export function buildOTBookingPayload(
-  restaurantId: number,
-  slot: OTSlot,
-  partySize: number,
-  guest: OTGuestInfo
-) {
-  return {
-    url: `${DAPI_BASE}/booking/make-reservation`,
-    body: {
-      restaurantId,
-      slotAvailabilityToken: slot.slotAvailabilityToken,
-      slotHash: slot.slotHash,
-      isModify: false,
-      reservationDateTime: slot.dateTime,
-      partySize,
-      firstName: guest.firstName,
-      lastName: guest.lastName,
-      email: guest.email,
-      phoneNumber: guest.phone.replace(/\D/g, ""),
-      phoneNumberCountryId: "US",
-      country: "US",
-      reservationType: "Standard",
-      reservationAttribute: "default",
-      pointsType: "Standard",
-      points: 100,
-      diningAreaId: 1,
-      optInEmailRestaurant: false,
-      additionalServiceFees: [],
-      tipAmount: 0,
-      tipPercent: 0,
-    },
-  }
-}
-
-// Server-side booking (only usable from residential IPs — not Vercel).
-// Kept for potential future use; browser should use buildOTBookingPayload instead.
 export async function bookOTSlot(
   restaurantId: number,
   slot: OTSlot,
-  date: string,
   partySize: number,
-  guest: OTGuestInfo
-): Promise<{ reservationId: string }> {
-  const { url, body } = buildOTBookingPayload(restaurantId, slot, partySize, guest)
-  const res = await fetch(url, {
+  guest: OTGuestInfo,
+  bearerToken: string
+): Promise<{ reservationId: string; confirmationNumber: string }> {
+  // Step 1: lock the slot
+  const lockRes = await fetch(`${MOBILE_BASE}/api/v1/reservation/${restaurantId}/lock`, {
     method: "POST",
-    headers: makeHeaders(),
-    body: JSON.stringify(body),
+    headers: mobileHeaders(bearerToken),
+    body: JSON.stringify({
+      dateTime: slot.dateTime,
+      partySize,
+      hash: slot.slotHash,
+      attribution: { partnerId: "84" },
+      selectedDiningArea: { tableAttribute: "default", diningAreaId: "1" },
+    }),
   })
-
-  if (!res.ok) {
-    const errText = await res.text()
-    throw new Error(`OT booking failed: ${res.status} — ${errText}`)
+  if (!lockRes.ok) {
+    const err = await lockRes.text()
+    throw new Error(`OT lock failed: ${lockRes.status} — ${err}`)
   }
-  const data = await res.json()
-  return { reservationId: String(data?.reservationId ?? data?.id ?? "unknown") }
+  const lock = await lockRes.json()
+  const lockId = String(lock?.id ?? "")
+  if (!lockId) throw new Error("OT lock returned no id")
+
+  // Step 2: complete the reservation
+  const bookRes = await fetch(`${MOBILE_BASE}/api/v3/reservation/${restaurantId}`, {
+    method: "POST",
+    headers: mobileHeaders(bearerToken),
+    body: JSON.stringify({
+      partySize,
+      dateTime: slot.dateTime,
+      hash: slot.slotHash,
+      slotAvailabilityToken: slot.token,
+      lockId,
+      gpid: guest.gpid,
+      dinerId: guest.customerId,
+      number: guest.phone.replace(/\D/g, ""),
+      countryId: "US",
+      notes: "",
+      loadInvitations: false,
+      attribution: { partnerId: "84" },
+      selectedDiningArea: { tableAttribute: "default", diningAreaId: "1" },
+      location: { latitude: 40.74, longitude: -73.98 },
+    }),
+  })
+  if (!bookRes.ok) {
+    const err = await bookRes.text()
+    throw new Error(`OT booking failed: ${bookRes.status} — ${err}`)
+  }
+  const booking = await bookRes.json()
+  return {
+    reservationId: String(booking?.id ?? booking?.gpid ?? "unknown"),
+    confirmationNumber: String(booking?.confirmationNumber ?? ""),
+  }
 }
 
+// Venue search — still uses the web GQL endpoint (no auth needed, no booking)
 export async function searchOTVenues(query: string): Promise<{
   id: number
   name: string
@@ -180,62 +178,60 @@ export async function searchOTVenues(query: string): Promise<{
   cuisine: string
   city: string
 }[]> {
-  const res = await fetch(`${GQL_URL}?optype=query&opname=Autocomplete`, {
-    method: "POST",
-    headers: makeHeaders(),
-    body: JSON.stringify({
-      operationName: "Autocomplete",
-      variables: {
-        term: query,
-        latitude: 40.758,
-        longitude: -73.9855,
-        useNewVersion: true,
+  function gqlHeaders() {
+    const csrf = crypto.randomUUID()
+    return {
+      "content-type": "application/json",
+      accept: "*/*",
+      origin: "https://www.opentable.com",
+      referer: "https://www.opentable.com/",
+      "x-csrf-token": csrf,
+      cookie: `OT-SessionId=${crypto.randomUUID()}`,
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    }
+  }
+
+  const body = {
+    operationName: "Autocomplete",
+    variables: { term: query, latitude: 40.758, longitude: -73.9855, useNewVersion: true },
+    extensions: {
+      persistedQuery: {
+        version: 1,
+        sha256Hash: "3cabca79abcb0db395d3cbebb4d47d41f3ddd69442eba3a57f76b943cceb8cf4",
       },
-      extensions: {
-        persistedQuery: {
-          version: 1,
-          sha256Hash: "3cabca79abcb0db395d3cbebb4d47d41f3ddd69442eba3a57f76b943cceb8cf4",
-        },
-      },
-    }),
+    },
+  }
+
+  const toResult = (r: { id?: number; name?: string; metroName?: string; neighborhoodName?: string; cuisineList?: string[] }) => ({
+    id: r.id ?? 0,
+    name: r.name ?? "Unknown",
+    neighborhood: r.neighborhoodName ?? r.metroName ?? "NYC",
+    cuisine: r.cuisineList?.[0] ?? "",
+    city: r.metroName ?? "New York",
   })
 
+  const res = await fetch(`${GQL_URL}?optype=query&opname=Autocomplete`, {
+    method: "POST",
+    headers: gqlHeaders(),
+    body: JSON.stringify(body),
+  })
   if (!res.ok) return []
   const data = await res.json()
-  // Try both old and new response shapes
   const results =
     data?.data?.autocomplete?.autocompleteResults ??
     data?.data?.autocomplete?.restaurants ??
     data?.data?.restaurants ??
     []
-  const autocompleteHits = results
-    // Keep anything that looks like a restaurant (has a numeric id) — don't filter by `type`
-    // because OT returns different type strings across API versions
+  const hits = results
     .filter((r: { id?: number; name?: string }) => r.id && r.name)
-    .map((r: { id?: number; name?: string; metroName?: string; neighborhoodName?: string; cuisineList?: string[] }) => ({
-      id: r.id ?? 0,
-      name: r.name ?? "Unknown",
-      neighborhood: r.neighborhoodName ?? r.metroName ?? "NYC",
-      cuisine: r.cuisineList?.[0] ?? "",
-      city: r.metroName ?? "New York",
-    }))
+    .map(toResult)
+  if (hits.length > 0) return hits
 
-  if (autocompleteHits.length > 0) return autocompleteHits
-
-  // Retry with useNewVersion: false — some restaurants only appear in the legacy index
+  // Retry with legacy index
   const res2 = await fetch(`${GQL_URL}?optype=query&opname=Autocomplete`, {
     method: "POST",
-    headers: makeHeaders(),
-    body: JSON.stringify({
-      operationName: "Autocomplete",
-      variables: { term: query, latitude: 40.758, longitude: -73.9855, useNewVersion: false },
-      extensions: {
-        persistedQuery: {
-          version: 1,
-          sha256Hash: "3cabca79abcb0db395d3cbebb4d47d41f3ddd69442eba3a57f76b943cceb8cf4",
-        },
-      },
-    }),
+    headers: gqlHeaders(),
+    body: JSON.stringify({ ...body, variables: { ...body.variables, useNewVersion: false } }),
   })
   if (!res2.ok) return []
   const data2 = await res2.json()
@@ -243,13 +239,5 @@ export async function searchOTVenues(query: string): Promise<{
     data2?.data?.autocomplete?.autocompleteResults ??
     data2?.data?.autocomplete?.restaurants ??
     []
-  return results2
-    .filter((r: { id?: number; name?: string }) => r.id && r.name)
-    .map((r: { id?: number; name?: string; metroName?: string; neighborhoodName?: string; cuisineList?: string[] }) => ({
-      id: r.id ?? 0,
-      name: r.name ?? "Unknown",
-      neighborhood: r.neighborhoodName ?? r.metroName ?? "NYC",
-      cuisine: r.cuisineList?.[0] ?? "",
-      city: r.metroName ?? "New York",
-    }))
+  return results2.filter((r: { id?: number; name?: string }) => r.id && r.name).map(toResult)
 }

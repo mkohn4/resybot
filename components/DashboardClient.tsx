@@ -1,13 +1,12 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState } from "react"
 import { signOut } from "next-auth/react"
 import Link from "next/link"
 import { AddTargetModal } from "./AddTargetModal"
 import { CredentialsModal } from "./CredentialsModal"
 import { OTProfileModal } from "./OTProfileModal"
 import { TargetCard } from "./TargetCard"
-import { useOTWatcher } from "@/lib/useOTWatcher"
 import { ThemeToggle } from "./ThemeToggle"
 
 type Target = {
@@ -28,17 +27,14 @@ type Target = {
   attempts: { id: string; attemptAt: Date; success: boolean; error: string | null; slot: string | null }[]
 }
 
-type OTProfile = { firstName: string; lastName: string; phone: string; email: string }
-
 type Props = {
   user: { name: string; email: string; image: string }
   initialTargets: Target[]
   hasCredentials: boolean
   hasOTProfile: boolean
-  otProfile: OTProfile | null
 }
 
-export function DashboardClient({ user, initialTargets, hasCredentials, hasOTProfile, otProfile }: Props) {
+export function DashboardClient({ user, initialTargets, hasCredentials, hasOTProfile }: Props) {
   const [targets, setTargets] = useState<Target[]>(initialTargets)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showCredModal, setShowCredModal] = useState(!hasCredentials)
@@ -51,19 +47,6 @@ export function DashboardClient({ user, initialTargets, hasCredentials, hasOTPro
     const data = await res.json()
     setTargets(data)
   }
-
-  const handleOTBooked = useCallback((id: string, slot: string) => {
-    setTargets((prev) =>
-      prev.map((t) => t.id === id ? { ...t, status: "BOOKED", bookedSlot: slot } : t)
-    )
-  }, [])
-
-  // Pass profile with email so watcher can book on behalf of user
-  const otProfileWithEmail = otProfile
-    ? { ...otProfile, email: user.email }
-    : null
-
-  useOTWatcher(targets, otProfileWithEmail, handleOTBooked)
 
   async function deleteTarget(id: string) {
     await fetch(`/api/targets/${id}`, { method: "DELETE" })

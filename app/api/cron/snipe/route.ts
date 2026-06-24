@@ -18,13 +18,11 @@ export async function GET(req: NextRequest) {
     // Neon HTTP adapter doesn't support OR clauses (triggers implicit transactions)
     // Run two separate queries and merge
     const [snipeTargets, watchTargets] = await Promise.all([
-      // OT SNIPE targets are also excluded — availability checks must come from a browser
       prisma.reservationTarget.findMany({
-        where: { status: "PENDING", mode: "SNIPE", snipeAt: { gte: twoMinsAgo, lte: now }, platform: "RESY" },
+        where: { status: "PENDING", mode: "SNIPE", snipeAt: { gte: twoMinsAgo, lte: now } },
       }),
-      // OT WATCH targets are handled client-side (browser) — skip here to avoid 403s
       prisma.reservationTarget.findMany({
-        where: { status: "WATCHING", mode: "WATCH", date: { gte: now }, platform: "RESY" },
+        where: { status: "WATCHING", mode: "WATCH", date: { gte: now } },
       }),
     ])
     const targets = [...snipeTargets, ...watchTargets]
@@ -109,6 +107,9 @@ export type TargetRow = {
       firstName: string
       lastName: string
       phone: string
+      encryptedBearerToken: string
+      gpid: string
+      customerId: string
     } | null
   }
 }
@@ -216,21 +217,23 @@ async function processOTTarget(target: TargetRow) {
   const deadline = isWatch ? Date.now() + 1_000 : Date.now() + 10_000
   let lastError = ""
 
-  // Use notificationEmail as guest email (falls back to userId lookup not needed — email is stored on target)
+  const bearerToken = decrypt(profile.encryptedBearerToken)
   const guestEmail = target.notificationEmail ?? ""
 
   while (Date.now() < deadline) {
     try {
-      const slots = await findOTSlots(target.venueId, dateStr, target.partySize)
+      const slots = await findOTSlots(target.venueId, dateStr, target.partySize, bearerToken)
       const best = pickBestOTSlot(slots, target.preferredTimes)
 
       if (best) {
-        await bookOTSlot(target.venueId, best, dateStr, target.partySize, {
+        await bookOTSlot(target.venueId, best, target.partySize, {
           firstName: profile.firstName,
           lastName: profile.lastName,
           email: guestEmail,
           phone: profile.phone,
-        })
+          gpid: profile.gpid,
+          customerId: profile.customerId,
+        }, bearerToken)
         const slot = best.dateTime
         await prisma.reservationTarget.update({
           where: { id: target.id },
