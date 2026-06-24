@@ -77,8 +77,10 @@ export function TargetCard({
 
   const bookedTime = target.bookedSlot
     ? (() => {
-        const t = target.bookedSlot.split(" ")[1]?.substring(0, 5) ?? ""
+        // Resy: "2026-07-10 20:00:00", OT: "2026-07-10T20:00"
+        const t = (target.bookedSlot.split("T")[1] ?? target.bookedSlot.split(" ")[1] ?? "").substring(0, 5)
         const [h, m] = t.split(":").map(Number)
+        if (isNaN(h) || isNaN(m)) return null
         return `${h > 12 ? h - 12 : h}:${m.toString().padStart(2, "0")}${h >= 12 ? "pm" : "am"}`
       })()
     : null
@@ -185,7 +187,7 @@ export function TargetCard({
             : "border-red-500/30 bg-red-500/10 text-red-400"
         }`}>
           {snipeResult.success
-            ? `Booked! ${snipeResult.slot ? (() => { const t = snipeResult.slot!.split(" ")[1]?.substring(0,5) ?? ""; const [h,m] = t.split(":").map(Number); return `${h>12?h-12:h}:${m.toString().padStart(2,"0")}${h>=12?"pm":"am"}` })() : ""}`
+            ? `Booked! ${snipeResult.slot ? (() => { const t = (snipeResult.slot!.split("T")[1] ?? snipeResult.slot!.split(" ")[1] ?? "").substring(0,5); const [h,m] = t.split(":").map(Number); return isNaN(h)||isNaN(m) ? "" : `${h>12?h-12:h}:${m.toString().padStart(2,"0")}${h>=12?"pm":"am"}` })() : ""}`
             : snipeResult.fallbackToWatch
             ? "No slots now — switched to Watch mode for cancellations"
             : `No slots available: ${snipeResult.message}`
@@ -200,7 +202,7 @@ export function TargetCard({
             <div className="flex flex-wrap gap-1.5">
               {target.preferredTimes.map((t) => {
                 const [h, m] = t.split(":").map(Number)
-                const label = `${h > 12 ? h - 12 : h}:${m.toString().padStart(2, "0")}${h >= 12 ? "pm" : "am"}`
+                const label = isNaN(h) || isNaN(m) ? t : `${h > 12 ? h - 12 : h}:${m.toString().padStart(2, "0")}${h >= 12 ? "pm" : "am"}`
                 return (
                   <span key={t} className="bg-gray-800 text-gray-300 text-xs px-2 py-0.5 rounded">
                     {label}

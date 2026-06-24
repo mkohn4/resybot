@@ -175,7 +175,7 @@ export function AddTargetModal({
               {nowResult.slot && (
                 <p className="text-emerald-400 font-semibold mt-1">
                   {(() => {
-                    const t = nowResult.slot!.split(" ")[1]?.substring(0, 5) ?? ""
+                    const t = (nowResult.slot!.split("T")[1] ?? nowResult.slot!.split(" ")[1] ?? "").substring(0, 5)
                     const [h, m] = t.split(":").map(Number)
                     return `${h > 12 ? h - 12 : h}:${m.toString().padStart(2, "0")}${h >= 12 ? "pm" : "am"}`
                   })()}
