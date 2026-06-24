@@ -3,9 +3,9 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { decrypt, encrypt } from "@/lib/crypto"
 import { resyLogin, findSlots, pickBestSlot, bookSlot } from "@/lib/resy"
+import { findOTSlots, pickBestOTSlot, bookOTSlot } from "@/lib/opentable"
 import { sendBookingSuccess, sendBookingFailed } from "@/lib/notify"
 
-// Immediately attempt to snipe a target (no waiting for cron)
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -20,22 +20,40 @@ export async function POST(
   if (!target) return NextResponse.json({ error: "Target not found" }, { status: 404 })
   if (target.status === "BOOKED") return NextResponse.json({ error: "Already booked" }, { status: 400 })
 
-  // Fetch credential separately — Neon HTTP adapter doesn't support nested includes
-  const cred = await prisma.resyCredential.findUnique({ where: { userId: session.user.id } })
+  const dateStr = target.date.toISOString().split("T")[0]
+  const stillFuture = new Date(target.date) > new Date()
+
+  await prisma.reservationTarget.update({
+    where: { id },
+    data: { status: "SNIPING", lastAttemptAt: new Date() },
+  })
+
+  // Route to correct platform handler
+  if (target.platform === "OPENTABLE") {
+    return handleOTSnipe({ id, target, dateStr, stillFuture, userId: session.user.id })
+  }
+  return handleResySnipe({ id, target, dateStr, stillFuture, userId: session.user.id })
+}
+
+async function handleResySnipe({ id, target, dateStr, stillFuture, userId }: {
+  id: string
+  target: { venueId: number; partySize: number; preferredTimes: string[]; notificationEmail: string | null; venueName: string; date: Date }
+  dateStr: string
+  stillFuture: boolean
+  userId: string
+}) {
+  const cred = await prisma.resyCredential.findUnique({ where: { userId } })
   if (!cred) return NextResponse.json({ error: "No Resy credentials on file" }, { status: 400 })
 
-  // Get or refresh auth token
   let authToken: string
   const tokenValid = cred.encryptedAuthToken && cred.tokenExpiresAt && cred.tokenExpiresAt > new Date()
   if (tokenValid && cred.encryptedAuthToken) {
     authToken = decrypt(cred.encryptedAuthToken)
   } else {
-    const email = decrypt(cred.encryptedEmail)
-    const password = decrypt(cred.encryptedPassword)
-    const freshAuth = await resyLogin(email, password)
+    const freshAuth = await resyLogin(decrypt(cred.encryptedEmail), decrypt(cred.encryptedPassword))
     authToken = freshAuth.token
     await prisma.resyCredential.update({
-      where: { userId: session.user.id },
+      where: { userId },
       data: {
         encryptedAuthToken: encrypt(authToken),
         paymentMethodId: freshAuth.paymentMethodId,
@@ -47,34 +65,20 @@ export async function POST(
   const paymentMethodId = cred.paymentMethodId
   if (!paymentMethodId) return NextResponse.json({ error: "No payment method on file" }, { status: 400 })
 
-  const dateStr = target.date.toISOString().split("T")[0]
-
-  await prisma.reservationTarget.update({
-    where: { id },
-    data: { status: "SNIPING", lastAttemptAt: new Date() },
-  })
-
   try {
     const slots = await findSlots(target.venueId, dateStr, target.partySize, authToken)
     const best = pickBestSlot(slots, target.preferredTimes, dateStr)
 
     if (!best) {
-      const stillFuture = new Date(target.date) > new Date()
       await prisma.reservationTarget.update({
         where: { id },
-        data: stillFuture
-          ? { status: "WATCHING", mode: "WATCH" }
-          : { status: "PENDING" },
+        data: stillFuture ? { status: "WATCHING", mode: "WATCH" } : { status: "PENDING" },
       })
-      await prisma.snipeAttempt.create({
-        data: { targetId: id, success: false, error: "No matching slots available right now" },
-      })
+      await prisma.snipeAttempt.create({ data: { targetId: id, success: false, error: "No matching slots available right now" } })
       return NextResponse.json({
         success: false,
         fallbackToWatch: stillFuture,
-        message: stillFuture
-          ? "No slots right now — switched to Watch mode for cancellations"
-          : "No matching slots available right now",
+        message: stillFuture ? "No slots right now — switched to Watch mode" : "No matching slots available right now",
       })
     }
 
@@ -82,41 +86,74 @@ export async function POST(
     const slot = best.date.start
     const time = slot.split(" ")[1]?.substring(0, 5) ?? ""
 
-    await prisma.reservationTarget.update({
-      where: { id },
-      data: { status: "BOOKED", bookedSlot: slot, lastAttemptAt: new Date() },
-    })
+    await prisma.reservationTarget.update({ where: { id }, data: { status: "BOOKED", bookedSlot: slot, lastAttemptAt: new Date() } })
     await prisma.snipeAttempt.create({ data: { targetId: id, success: true, slot } })
-
     if (target.notificationEmail) {
-      await sendBookingSuccess({
-        to: target.notificationEmail,
-        restaurantName: target.venueName,
-        date: dateStr,
-        time,
-        partySize: target.partySize,
-      }).catch(() => {})
+      await sendBookingSuccess({ to: target.notificationEmail, restaurantName: target.venueName, date: dateStr, time, partySize: target.partySize }).catch(() => {})
     }
-
     return NextResponse.json({ success: true, slot, time })
   } catch (err: unknown) {
     const error = err instanceof Error ? err.message : String(err)
-    const stillFuture = new Date(target.date) > new Date()
-    await prisma.reservationTarget.update({
-      where: { id },
-      data: stillFuture ? { status: "WATCHING", mode: "WATCH" } : { status: "FAILED" },
-    })
+    await prisma.reservationTarget.update({ where: { id }, data: stillFuture ? { status: "WATCHING", mode: "WATCH" } : { status: "FAILED" } })
     await prisma.snipeAttempt.create({ data: { targetId: id, success: false, error } })
-
     if (target.notificationEmail) {
-      await sendBookingFailed({
-        to: target.notificationEmail,
-        restaurantName: target.venueName,
-        date: dateStr,
-        error,
-      }).catch(() => {})
+      await sendBookingFailed({ to: target.notificationEmail, restaurantName: target.venueName, date: dateStr, error }).catch(() => {})
+    }
+    return NextResponse.json({ success: false, message: error }, { status: 500 })
+  }
+}
+
+async function handleOTSnipe({ id, target, dateStr, stillFuture, userId }: {
+  id: string
+  target: { venueId: number; partySize: number; preferredTimes: string[]; notificationEmail: string | null; venueName: string; date: Date }
+  dateStr: string
+  stillFuture: boolean
+  userId: string
+}) {
+  const profile = await prisma.oTGuestProfile.findUnique({ where: { userId } })
+  if (!profile) return NextResponse.json({ error: "No OpenTable guest profile on file — add your name and phone in settings" }, { status: 400 })
+
+  const guestEmail = target.notificationEmail ?? ""
+
+  try {
+    const slots = await findOTSlots(target.venueId, dateStr, target.partySize)
+    const best = pickBestOTSlot(slots, target.preferredTimes)
+
+    if (!best) {
+      await prisma.reservationTarget.update({
+        where: { id },
+        data: stillFuture ? { status: "WATCHING", mode: "WATCH" } : { status: "PENDING" },
+      })
+      await prisma.snipeAttempt.create({ data: { targetId: id, success: false, error: "No matching slots available right now" } })
+      return NextResponse.json({
+        success: false,
+        fallbackToWatch: stillFuture,
+        message: stillFuture ? "No slots right now — switched to Watch mode" : "No matching slots available right now",
+      })
     }
 
+    await bookOTSlot(target.venueId, best, dateStr, target.partySize, {
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      email: guestEmail,
+      phone: profile.phone,
+    })
+    const slot = best.dateTime
+    const time = slot.split("T")[1]?.substring(0, 5) ?? ""
+
+    await prisma.reservationTarget.update({ where: { id }, data: { status: "BOOKED", bookedSlot: slot, lastAttemptAt: new Date() } })
+    await prisma.snipeAttempt.create({ data: { targetId: id, success: true, slot } })
+    if (target.notificationEmail) {
+      await sendBookingSuccess({ to: target.notificationEmail, restaurantName: target.venueName, date: dateStr, time, partySize: target.partySize }).catch(() => {})
+    }
+    return NextResponse.json({ success: true, slot, time })
+  } catch (err: unknown) {
+    const error = err instanceof Error ? err.message : String(err)
+    await prisma.reservationTarget.update({ where: { id }, data: stillFuture ? { status: "WATCHING", mode: "WATCH" } : { status: "FAILED" } })
+    await prisma.snipeAttempt.create({ data: { targetId: id, success: false, error } })
+    if (target.notificationEmail) {
+      await sendBookingFailed({ to: target.notificationEmail, restaurantName: target.venueName, date: dateStr, error }).catch(() => {})
+    }
     return NextResponse.json({ success: false, message: error }, { status: 500 })
   }
 }
