@@ -101,6 +101,7 @@ export function AddTargetModal({
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? "Could not resolve URL")
+      setPlatform("opentable")
       selectRestaurant({
         venueId: data.id,
         name: data.name,
