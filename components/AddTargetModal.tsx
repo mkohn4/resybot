@@ -45,13 +45,21 @@ export function AddTargetModal({
 
   useEffect(() => {
     if (suppressSearch.current) { suppressSearch.current = false; return }
-    if (query.length < 2 || useCustom) { setResults([]); return }
+    if (query.length < 2 || useCustom) {
+      setResults((prev) => (prev.length === 0 ? prev : []))
+      setShowDropdown(false)
+      return
+    }
     const timer = setTimeout(async () => {
-      const res = await fetch(`/api/venues/lookup?q=${encodeURIComponent(query)}&platform=${platform}`)
-      const data = await res.json()
-      setResults(data.results ?? [])
-      setShowDropdown(true)
-    }, 200)
+      try {
+        const res = await fetch(`/api/venues/lookup?q=${encodeURIComponent(query)}&platform=${platform}`)
+        const data = await res.json()
+        setResults(data.results ?? [])
+        setShowDropdown(true)
+      } catch {
+        setResults([])
+      }
+    }, 300)
     return () => clearTimeout(timer)
   }, [query, useCustom, platform])
 
@@ -347,15 +355,16 @@ export function AddTargetModal({
               />
             </div>
           )}
-          {platform === "opentable" && !useCustom && (
-            <div className="mt-3">
-              <p className="text-xs text-gray-500 mb-1.5">Can&apos;t find it? Paste the OpenTable URL:</p>
+          {platform === "opentable" && (
+            <div className="mt-3 p-3 bg-gray-800/60 border border-gray-700 rounded-xl">
+              <p className="text-xs text-gray-400 font-medium mb-2">Can&apos;t find it? Paste the OpenTable URL:</p>
               <div className="flex gap-2">
                 <input
                   value={otUrl}
                   onChange={(e) => setOtUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && resolveOtUrl()}
                   placeholder="https://www.opentable.com/the-odeon"
-                  className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-xs"
+                  className="flex-1 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-xs"
                 />
                 <button
                   onClick={resolveOtUrl}
@@ -365,7 +374,7 @@ export function AddTargetModal({
                   {otUrlLoading ? "…" : "Use"}
                 </button>
               </div>
-              {otUrlError && <p className="text-red-400 text-xs mt-1">{otUrlError}</p>}
+              {otUrlError && <p className="text-red-400 text-xs mt-1.5">{otUrlError}</p>}
             </div>
           )}
           <button
