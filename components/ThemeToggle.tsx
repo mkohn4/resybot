@@ -25,9 +25,14 @@ export function ThemeToggle() {
     <button
       onClick={toggle}
       aria-label="Toggle theme"
-      className="text-gray-400 hover:text-white transition-colors py-2 px-2 text-lg"
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none ${dark ? "bg-gray-600" : "bg-gray-300"}`}
     >
-      {dark ? "☀️" : "🌙"}
+      <span
+        style={{ backgroundColor: dark ? "#1f2937" : "#fff" }}
+        className={`inline-flex h-4 w-4 items-center justify-center rounded-full shadow transition-transform duration-200 text-[10px] ${dark ? "translate-x-6" : "translate-x-1"}`}
+      >
+        {dark ? "🌙" : "☀️"}
+      </span>
     </button>
   )
 }
