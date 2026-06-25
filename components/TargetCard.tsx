@@ -68,11 +68,13 @@ export function TargetCard({
   })
 
   const snipeDate = new Date(target.snipeAt).toLocaleString("en-US", {
+    timeZone: "America/New_York",
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
+    timeZoneName: "short",
   })
 
   const bookedTime = target.bookedSlot
