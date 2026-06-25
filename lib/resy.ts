@@ -87,19 +87,6 @@ export function pickBestSlot(
     return slot
   }
 
-  // Fallback: first non-patio slot that lands in our time window
-  for (const slot of slots) {
-    const tableType = slot.config.type?.toLowerCase() ?? ""
-    if (tableType.includes("patio") || tableType.includes("outside") || tableType.includes("outdoor")) {
-      continue
-    }
-    const time = slot.date.start.split(" ")[1]?.substring(0, 5)
-    if (!time) continue
-    const [h, m] = time.split(":").map(Number)
-    const mins = h * 60 + m
-    if ((mins >= 11 * 60 + 30 && mins <= 13 * 60 + 30) || (mins >= 17 * 60 + 30 && mins <= 22 * 60 + 30)) return slot
-  }
-
   return null
 }
 
