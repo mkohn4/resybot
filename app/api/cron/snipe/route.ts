@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { decrypt, encrypt } from "@/lib/crypto"
 import { resyLogin, findSlots, pickBestSlot, bookSlot } from "@/lib/resy"
-import { findOTSlots, pickBestOTSlot, bookOTSlot } from "@/lib/opentable"
+import { findOTSlots, pickBestOTSlot, bookOTSlot, OTOverlapError } from "@/lib/opentable"
 import { sendBookingSuccess, sendBookingFailed } from "@/lib/notify"
 
 export async function GET(req: NextRequest) {
@@ -221,23 +221,33 @@ async function processOTTarget(target: TargetRow) {
 
   const bearerToken = decrypt(profile.encryptedBearerToken)
   const guestEmail = target.notificationEmail ?? ""
+  const skipSlots = new Set<string>()
 
   while (Date.now() < deadline) {
     try {
       const slots = await findOTSlots(target.venueId, dateStr, target.partySize, bearerToken)
-      const best = pickBestOTSlot(slots, target.preferredTimes)
+      const best = pickBestOTSlot(slots, target.preferredTimes, skipSlots)
 
       if (best) {
-        await bookOTSlot(target.venueId, best, target.partySize, {
-          firstName: profile.firstName,
-          lastName: decrypt(profile.encryptedLastName),
-          email: guestEmail,
-          phone: decrypt(profile.encryptedPhone),
-          gpid: profile.gpid,
-          customerId: profile.customerId,
-          cardToken: profile.encryptedCardToken ? decrypt(profile.encryptedCardToken) : "",
-          cardLast4: profile.cardLast4,
-        }, bearerToken)
+        try {
+          await bookOTSlot(target.venueId, best, target.partySize, {
+            firstName: profile.firstName,
+            lastName: decrypt(profile.encryptedLastName),
+            email: guestEmail,
+            phone: decrypt(profile.encryptedPhone),
+            gpid: profile.gpid,
+            customerId: profile.customerId,
+            cardToken: profile.encryptedCardToken ? decrypt(profile.encryptedCardToken) : "",
+            cardLast4: profile.cardLast4,
+          }, bearerToken)
+        } catch (bookErr) {
+          if (bookErr instanceof OTOverlapError) {
+            skipSlots.add(best.dateTime)
+            lastError = bookErr.message
+            continue
+          }
+          throw bookErr
+        }
         const slot = best.dateTime
         await prisma.reservationTarget.update({
           where: { id: target.id },

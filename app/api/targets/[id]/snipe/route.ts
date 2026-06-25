@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { decrypt, encrypt } from "@/lib/crypto"
 import { resyLogin, findSlots, pickBestSlot, bookSlot } from "@/lib/resy"
-import { findOTSlots, pickBestOTSlot, bookOTSlot } from "@/lib/opentable"
+import { findOTSlots, pickBestOTSlot, bookOTSlot, OTOverlapError } from "@/lib/opentable"
 import { sendBookingSuccess, sendBookingFailed } from "@/lib/notify"
 
 export async function POST(
@@ -119,7 +119,32 @@ async function handleOTSnipe({ id, target, dateStr, stillFuture, userId }: {
 
   try {
     const slots = await findOTSlots(target.venueId, dateStr, target.partySize, bearerToken)
-    const best = pickBestOTSlot(slots, target.preferredTimes)
+    const skipSlots = new Set<string>()
+    const guestInfo = {
+      firstName: profile.firstName,
+      lastName: decrypt(profile.encryptedLastName),
+      email: guestEmail,
+      phone: decrypt(profile.encryptedPhone),
+      gpid: profile.gpid,
+      customerId: profile.customerId,
+      cardToken: profile.encryptedCardToken ? decrypt(profile.encryptedCardToken) : "",
+      cardLast4: profile.cardLast4,
+    }
+
+    let best = pickBestOTSlot(slots, target.preferredTimes, skipSlots)
+    while (best) {
+      try {
+        await bookOTSlot(target.venueId, best, target.partySize, guestInfo, bearerToken)
+        break
+      } catch (bookErr) {
+        if (bookErr instanceof OTOverlapError) {
+          skipSlots.add(best.dateTime)
+          best = pickBestOTSlot(slots, target.preferredTimes, skipSlots)
+          continue
+        }
+        throw bookErr
+      }
+    }
 
     if (!best) {
       await prisma.reservationTarget.update({
@@ -134,16 +159,6 @@ async function handleOTSnipe({ id, target, dateStr, stillFuture, userId }: {
       })
     }
 
-    await bookOTSlot(target.venueId, best, target.partySize, {
-      firstName: profile.firstName,
-      lastName: decrypt(profile.encryptedLastName),
-      email: guestEmail,
-      phone: decrypt(profile.encryptedPhone),
-      gpid: profile.gpid,
-      customerId: profile.customerId,
-      cardToken: profile.encryptedCardToken ? decrypt(profile.encryptedCardToken) : "",
-      cardLast4: profile.cardLast4,
-    }, bearerToken)
     const slot = best.dateTime
     const time = slot.split("T")[1]?.substring(0, 5) ?? ""
 

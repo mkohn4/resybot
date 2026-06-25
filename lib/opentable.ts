@@ -1,5 +1,9 @@
 const MOBILE_BASE = "https://mobile-api.opentable.com"
 
+export class OTOverlapError extends Error {
+  constructor() { super("You already have an overlapping reservation on OpenTable at this time") }
+}
+
 function mobileHeaders(bearerToken: string) {
   return {
     "Content-Type": "application/json",
@@ -117,12 +121,13 @@ export async function findOTSlots(
 
 export function pickBestOTSlot(
   slots: OTSlot[],
-  preferredTimes: string[]
+  preferredTimes: string[],
+  skip: Set<string> = new Set()
 ): OTSlot | null {
   const slotByTime: Record<string, OTSlot> = {}
   for (const slot of slots) {
     const time = slot.dateTime.split("T")[1]?.substring(0, 5)
-    if (time) slotByTime[time] = slot
+    if (time && !skip.has(slot.dateTime)) slotByTime[time] = slot
   }
 
   for (const t of preferredTimes) {
@@ -131,6 +136,7 @@ export function pickBestOTSlot(
 
   // Fallback: first slot in lunch (11:30–13:30) or dinner (17:30–22:30) window
   for (const slot of slots) {
+    if (skip.has(slot.dateTime)) continue
     const time = slot.dateTime.split("T")[1]?.substring(0, 5)
     if (!time) continue
     const [h, m] = time.split(":").map(Number)
@@ -220,8 +226,19 @@ export async function bookOTSlot(
     body: JSON.stringify(bookBody),
   })
   if (!bookRes.ok) {
-    const err = await bookRes.text()
-    throw new Error(`OT booking failed: ${bookRes.status} — ${err}`)
+    const errText = await bookRes.text()
+    if (bookRes.status === 409) {
+      try {
+        const errJson = JSON.parse(errText)
+        const code = errJson?.errors?.[0]?.code ?? ""
+        if (code === "DINER_HAS_OVERALAPPING_RESERVATION" || code === "DINER_HAS_OVERLAPPING_RESERVATION") {
+          throw new OTOverlapError()
+        }
+      } catch (e) {
+        if (e instanceof OTOverlapError) throw e
+      }
+    }
+    throw new Error(`OT booking failed: ${bookRes.status} — ${errText}`)
   }
   const booking = await bookRes.json()
   return {
