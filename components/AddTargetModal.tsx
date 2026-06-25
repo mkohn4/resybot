@@ -37,6 +37,7 @@ export function AddTargetModal({
   const [partySize, setPartySize] = useState(2)
   const [preferredTimes, setPreferredTimes] = useState<string[]>(DEFAULT_TIMES)
   const [snipeAt, setSnipeAt] = useState("")
+  const [timezone, setTimezone] = useState("America/New_York")
   const [notificationEmail, setNotificationEmail] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -112,9 +113,23 @@ export function AddTargetModal({
     setError("")
     setNowResult(null)
 
+    // Convert the datetime-local string from the selected timezone to UTC.
+    // Strategy: treat the input as UTC to get a "naive" Date, then measure how far
+    // off that UTC moment is from what the target timezone would display, and correct.
+    function localTZtoUTC(localStr: string, tz: string): string {
+      const naive = new Date(localStr + "Z")
+      const fmt = new Intl.DateTimeFormat("en-US", {
+        timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", hour12: false,
+      })
+      const p = Object.fromEntries(fmt.formatToParts(naive).map((x) => [x.type, x.value]))
+      const h = p.hour === "24" ? "00" : p.hour
+      const inTZ = new Date(`${p.year}-${p.month}-${p.day}T${h}:${p.minute}Z`)
+      return new Date(naive.getTime() + (naive.getTime() - inTZ.getTime())).toISOString()
+    }
     const snipeTime = mode === "now" || mode === "watch"
       ? new Date().toISOString()
-      : new Date(snipeAt).toISOString()
+      : localTZtoUTC(snipeAt, timezone)
 
     try {
       const res = await fetch("/api/targets", {
@@ -415,12 +430,24 @@ export function AddTargetModal({
                 <span className="ml-2 text-emerald-400 text-xs">(auto-suggested)</span>
               )}
             </label>
-            <input
-              type="datetime-local"
-              value={snipeAt}
-              onChange={(e) => setSnipeAt(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-emerald-500 text-sm"
-            />
+            <div className="flex gap-2">
+              <input
+                type="datetime-local"
+                value={snipeAt}
+                onChange={(e) => setSnipeAt(e.target.value)}
+                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-emerald-500 text-sm"
+              />
+              <select
+                value={timezone}
+                onChange={(e) => setTimezone(e.target.value)}
+                className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-2.5 text-white focus:outline-none focus:border-emerald-500 text-sm"
+              >
+                <option value="America/New_York">ET</option>
+                <option value="America/Chicago">CT</option>
+                <option value="America/Denver">MT</option>
+                <option value="America/Los_Angeles">PT</option>
+              </select>
+            </div>
             <p className="text-gray-500 text-xs mt-1">The exact moment the bot will start trying to snipe</p>
           </div>
         )}
