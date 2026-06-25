@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { signOut } from "next-auth/react"
 import Link from "next/link"
 import { AddTargetModal } from "./AddTargetModal"
@@ -53,6 +53,19 @@ export function DashboardClient({ user, initialTargets, hasCredentials, hasOTPro
     setTargets((prev) => prev.filter((t) => t.id !== id))
   }
 
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    if (menuOpen) document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [menuOpen])
+
   const [bookedCollapsed, setBookedCollapsed] = useState(false)
   const [expiredCollapsed, setExpiredCollapsed] = useState(true)
 
@@ -71,36 +84,61 @@ export function DashboardClient({ user, initialTargets, hasCredentials, hasOTPro
             <h1 className="text-xl font-bold text-white tracking-tight">ResyBot</h1>
             <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-medium">NYC</span>
           </div>
-          <div className="flex items-center gap-1 sm:gap-3">
-            {user.image && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={user.image} alt={user.name} className="w-8 h-8 rounded-full" />
-            )}
-            <button
-              onClick={() => setShowCredModal(true)}
-              className="text-sm text-gray-400 hover:text-white transition-colors py-2 px-2"
-            >
-              {credsSaved ? "Resy ✓" : "Connect Resy"}
-            </button>
-            <button
-              onClick={() => setShowOTModal(true)}
-              className="text-sm text-gray-400 hover:text-white transition-colors py-2 px-2"
-            >
-              {otProfileSaved ? "OT ✓" : "Connect OT"}
-            </button>
-            <Link
-              href="/dashboard/lookup"
-              className="text-sm text-gray-400 hover:text-white transition-colors py-2 px-2"
-            >
-              Lookup
-            </Link>
+          <div className="flex items-center gap-3">
             <ThemeToggle />
-            <button
-              onClick={() => signOut({ callbackUrl: "/login" })}
-              className="text-sm text-gray-500 hover:text-gray-300 transition-colors py-2 px-2"
-            >
-              Sign out
-            </button>
+            <div className="relative" ref={menuRef}>
+              <button
+                onClick={() => setMenuOpen((o) => !o)}
+                className="flex items-center justify-center w-8 h-8 rounded-full overflow-hidden ring-2 ring-transparent hover:ring-gray-600 transition-all focus:outline-none"
+                aria-label="Account menu"
+              >
+                {user.image
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={user.image} alt={user.name} className="w-8 h-8 rounded-full" />
+                  : <span className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-gray-300 text-sm font-medium">{user.name?.[0] ?? "?"}</span>
+                }
+              </button>
+
+              {menuOpen && (
+                <div className="absolute right-0 mt-2 w-52 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl z-50 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-gray-800">
+                    <p className="text-white text-sm font-medium truncate">{user.name}</p>
+                    <p className="text-gray-500 text-xs truncate">{user.email}</p>
+                  </div>
+                  <div className="py-1">
+                    <button
+                      onClick={() => { setShowCredModal(true); setMenuOpen(false) }}
+                      className="w-full text-left px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors flex items-center justify-between"
+                    >
+                      <span>Connect Resy</span>
+                      {credsSaved && <span className="text-emerald-400 text-xs">✓</span>}
+                    </button>
+                    <button
+                      onClick={() => { setShowOTModal(true); setMenuOpen(false) }}
+                      className="w-full text-left px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors flex items-center justify-between"
+                    >
+                      <span>Connect OpenTable</span>
+                      {otProfileSaved && <span className="text-emerald-400 text-xs">✓</span>}
+                    </button>
+                    <Link
+                      href="/dashboard/lookup"
+                      onClick={() => setMenuOpen(false)}
+                      className="w-full text-left px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors flex items-center gap-2 block"
+                    >
+                      Venue Lookup
+                    </Link>
+                  </div>
+                  <div className="border-t border-gray-800 py-1">
+                    <button
+                      onClick={() => signOut({ callbackUrl: "/login" })}
+                      className="w-full text-left px-4 py-2.5 text-sm text-red-400 hover:bg-gray-800 hover:text-red-300 transition-colors"
+                    >
+                      Sign out
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>
