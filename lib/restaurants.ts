@@ -7,6 +7,7 @@ export type Restaurant = {
   releaseTime: string | null // HH:MM ET, 24h
   releaseNotes: string
   priceRange: string
+  platform?: "resy" | "opentable"  // defaults to "resy" if omitted
 }
 
 export const NYC_RESTAURANTS: Restaurant[] = [
@@ -19,6 +20,17 @@ export const NYC_RESTAURANTS: Restaurant[] = [
     releaseTime: "00:00",
     releaseNotes: "Drops at midnight ET exactly 28 days out. One of the hardest tables in NYC — gone in seconds.",
     priceRange: "$$$$",
+  },
+  {
+    name: "Don Angie",
+    venueId: null,
+    neighborhood: "West Village",
+    cuisine: "Italian-American",
+    daysOut: 7,
+    releaseTime: "09:00",
+    releaseNotes: "Reservations open 7 days in advance at 9am ET, exclusively on OpenTable.",
+    priceRange: "$$$",
+    platform: "opentable",
   },
   {
     name: "Lilia",
