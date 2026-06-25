@@ -31,7 +31,10 @@ export function CredentialsModal({ onClose, onSaved }: { onClose: () => void; on
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6 w-full max-w-md shadow-2xl">
-        <h2 className="text-lg font-bold text-white mb-1">Connect Resy Account</h2>
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-lg font-bold text-white">Connect Resy Account</h2>
+          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors p-1 -mr-1" aria-label="Close">✕</button>
+        </div>
         <p className="text-gray-400 text-sm mb-6">
           Your credentials are AES-256-GCM encrypted and stored securely. We only use them to book on your behalf.
         </p>

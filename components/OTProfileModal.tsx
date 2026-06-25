@@ -42,7 +42,10 @@ export function OTProfileModal({
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-start justify-center p-4 overflow-y-auto">
       <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6 w-full max-w-md shadow-2xl my-4">
-        <h2 className="text-lg font-bold text-white mb-1">Connect OpenTable</h2>
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-lg font-bold text-white">Connect OpenTable</h2>
+          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors p-1 -mr-1" aria-label="Close">✕</button>
+        </div>
         <p className="text-gray-500 text-xs mb-5">
           Paste your Bearer token from the OpenTable app. We&apos;ll fetch your profile automatically.
         </p>

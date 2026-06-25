@@ -212,7 +212,10 @@ export function AddTargetModal({
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-start justify-center p-4 overflow-y-auto">
       <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6 w-full max-w-lg shadow-2xl my-4">
-        <h2 className="text-lg font-bold text-white mb-5">Add Reservation Target</h2>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-bold text-white">Add Reservation Target</h2>
+          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors p-1 -mr-1" aria-label="Close">✕</button>
+        </div>
 
         {/* Platform indicator — set automatically when selecting a result */}
         {selected && (
