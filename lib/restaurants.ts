@@ -21,16 +21,6 @@ export const NYC_RESTAURANTS: Restaurant[] = [
     priceRange: "$$$$",
   },
   {
-    name: "Don Angie",
-    venueId: 2998,
-    neighborhood: "West Village",
-    cuisine: "Italian-American",
-    daysOut: 28,
-    releaseTime: "00:00",
-    releaseNotes: "Midnight drop 28 days out. Extremely competitive.",
-    priceRange: "$$$",
-  },
-  {
     name: "Lilia",
     venueId: 1274,
     neighborhood: "Williamsburg",
