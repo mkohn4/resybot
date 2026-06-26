@@ -195,7 +195,7 @@ async function processResyTarget(target: TargetRow) {
     if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs))
   }
 
-  const deadline = isWatch ? Date.now() + 1_000 : Date.now() + 10_000
+  const deadline = isWatch ? Date.now() + 1_000 : Date.now() + 30_000
   let lastError = ""
 
   while (Date.now() < deadline) {
@@ -257,7 +257,7 @@ async function processOTTarget(target: TargetRow) {
     if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs))
   }
 
-  const deadline = isWatch ? Date.now() + 1_000 : Date.now() + 10_000
+  const deadline = isWatch ? Date.now() + 1_000 : Date.now() + 30_000
   let lastError = ""
 
   const bearerToken = decrypt(profile.encryptedBearerToken)
