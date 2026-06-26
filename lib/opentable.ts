@@ -4,6 +4,10 @@ export class OTOverlapError extends Error {
   constructor() { super("You already have an overlapping reservation on OpenTable at this time") }
 }
 
+export class OTAuthError extends Error {
+  constructor() { super("OpenTable bearer token expired — reconnect your account in settings") }
+}
+
 function mobileHeaders(bearerToken: string) {
   return {
     "Content-Type": "application/json",
@@ -85,7 +89,10 @@ export async function findOTSlots(
   url.searchParams.set("stats", "numBooked")
 
   const res = await fetch(url.toString(), { headers: mobileHeaders(bearerToken) })
-  if (!res.ok) throw new Error(`OT findSlots failed: ${res.status}`)
+  if (!res.ok) {
+    if (res.status === 401) throw new OTAuthError()
+    throw new Error(`OT findSlots failed: ${res.status}`)
+  }
   const data = await res.json()
 
   // Slots live at data.availability.availability.timeslots
@@ -173,6 +180,7 @@ export async function bookOTSlot(
   })
   if (!lockRes.ok) {
     const err = await lockRes.text()
+    if (lockRes.status === 401) throw new OTAuthError()
     throw new Error(`OT lock failed: ${lockRes.status} — ${err}`)
   }
   const lock = await lockRes.json()

@@ -33,10 +33,13 @@ export async function PATCH(
   if (!target) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
   const body = await req.json()
+  if (body.status !== undefined && body.status !== "CANCELLED") {
+    return NextResponse.json({ error: "Invalid status" }, { status: 400 })
+  }
   const updated = await prisma.reservationTarget.update({
     where: { id },
     data: {
-      ...(body.status && { status: body.status }),
+      ...(body.status === "CANCELLED" && { status: body.status }),
       ...(body.partySize && { partySize: Number(body.partySize) }),
       ...(body.preferredTimes && { preferredTimes: body.preferredTimes }),
       ...(body.snipeAt && { snipeAt: new Date(body.snipeAt) }),

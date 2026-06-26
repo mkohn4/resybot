@@ -145,7 +145,7 @@ export function DashboardClient({ user, initialTargets, hasCredentials, hasOTPro
 
       <main className="max-w-5xl mx-auto px-4 py-8">
         {/* Credential warning */}
-        {!credsSaved && (
+        {!credsSaved && !otProfileSaved && (
           <div className="mb-6 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-amber-400 font-medium text-sm">Connect your Resy account to start sniping</p>
@@ -181,7 +181,7 @@ export function DashboardClient({ user, initialTargets, hasCredentials, hasOTPro
           <h2 className="text-lg font-semibold text-white">Reservation Targets</h2>
           <button
             onClick={() => setShowAddModal(true)}
-            disabled={!credsSaved}
+            disabled={!credsSaved && !otProfileSaved}
             className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-sm px-4 py-2.5 rounded-lg transition-colors flex items-center gap-2"
           >
             <span className="text-lg leading-none">+</span> Add Target
