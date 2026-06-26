@@ -295,9 +295,20 @@ export function suggestSnipeTime(restaurant: Restaurant, targetDate: Date): Date
   snipeDate.setDate(snipeDate.getDate() - restaurant.daysOut)
 
   const [hours, minutes] = restaurant.releaseTime.split(":").map(Number)
-  // releaseTime is ET — store as UTC offset (ET = UTC-4 in summer, UTC-5 in winter)
-  // We store in UTC; the UI shows in ET
-  snipeDate.setUTCHours(hours + 4, minutes, 0, 0) // assume EDT (UTC-4) as default
+
+  // Determine the real ET→UTC offset for snipeDate (handles EDT vs EST automatically)
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(snipeDate.getFullYear(), snipeDate.getMonth(), snipeDate.getDate(), 12, 0, 0))
+  const p = Object.fromEntries(parts.map(({ type, value }) => [type, value]))
+  const localNoon = new Date(`${p.year}-${p.month}-${p.day}T12:00:00`)
+  const utcNoon = new Date(Date.UTC(snipeDate.getFullYear(), snipeDate.getMonth(), snipeDate.getDate(), 12, 0, 0))
+  const offsetHours = (utcNoon.getTime() - localNoon.getTime()) / 3_600_000
+
+  snipeDate.setUTCHours(hours + offsetHours, minutes, 0, 0)
 
   return snipeDate
 }

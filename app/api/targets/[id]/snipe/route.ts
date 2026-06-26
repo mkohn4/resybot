@@ -23,10 +23,15 @@ export async function POST(
   const dateStr = target.date.toISOString().split("T")[0]
   const stillFuture = new Date(target.date) > new Date()
 
-  await prisma.reservationTarget.update({
-    where: { id },
+  // Atomic claim: only proceed if we successfully transition to SNIPING
+  // Prevents concurrent cron + on-demand from double-booking the same target
+  const claimed = await prisma.reservationTarget.updateMany({
+    where: { id, userId: session.user.id, status: { not: "SNIPING" }, NOT: { status: "BOOKED" } },
     data: { status: "SNIPING", lastAttemptAt: new Date() },
   })
+  if (claimed.count === 0) {
+    return NextResponse.json({ error: "Already being processed" }, { status: 409 })
+  }
 
   // Route to correct platform handler
   if (target.platform === "OPENTABLE") {

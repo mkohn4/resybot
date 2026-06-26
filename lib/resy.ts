@@ -20,7 +20,7 @@ export type ResySlot = {
 
 export type ResyAuthResult = {
   token: string
-  paymentMethodId: string
+  paymentMethodId: string | null
 }
 
 export async function resyLogin(email: string, password: string): Promise<ResyAuthResult> {
@@ -35,7 +35,7 @@ export async function resyLogin(email: string, password: string): Promise<ResyAu
   if (!data.token) throw new Error("Invalid credentials — no token returned")
   return {
     token: data.token,
-    paymentMethodId: String(data.payment_method_id),
+    paymentMethodId: data.payment_method_id ? String(data.payment_method_id) : null,
   }
 }
 

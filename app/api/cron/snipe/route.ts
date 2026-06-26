@@ -23,16 +23,34 @@ export async function GET(req: NextRequest) {
       data: { status: "WATCHING", mode: "WATCH" },
     })
 
-    // Neon HTTP adapter doesn't support OR clauses (triggers implicit transactions)
-    // Run two separate queries and merge
-    const [snipeTargets, watchTargets] = await Promise.all([
-      prisma.reservationTarget.findMany({
-        where: { status: "PENDING", mode: "SNIPE", snipeAt: { gte: twoMinsAgo, lte: lookAhead } },
-      }),
-      prisma.reservationTarget.findMany({
-        where: { status: "WATCHING", mode: "WATCH", date: { gte: now } },
-      }),
-    ])
+    // Atomically claim SNIPE targets: PENDING → SNIPING in a single UPDATE...RETURNING
+    // Prevents concurrent cron invocations from double-processing the same target
+    type RawTarget = {
+      id: string; userId: string; platform: string; venueId: number; venueName: string
+      date: Date; snipeAt: Date | null; partySize: number; preferredTimes: string[]
+      mode: string; status: string; notificationEmail: string | null
+      lastAttemptAt: Date | null; bookedSlot: string | null
+    }
+    const snipeTargets = await prisma.$queryRaw<RawTarget[]>`
+      UPDATE "ReservationTarget"
+      SET status = 'SNIPING'
+      WHERE status = 'PENDING'
+        AND mode = 'SNIPE'
+        AND "snipeAt" >= ${twoMinsAgo}
+        AND "snipeAt" <= ${lookAhead}
+      RETURNING *
+    `
+    // For WATCH targets, use a recency guard: skip targets processed in the last 45s
+    // to prevent concurrent cron ticks from processing the same target twice
+    const watchTargets = await prisma.reservationTarget.findMany({
+      where: {
+        status: "WATCHING", mode: "WATCH", date: { gte: now },
+        OR: [
+          { lastAttemptAt: null },
+          { lastAttemptAt: { lt: new Date(now.getTime() - 45_000) } },
+        ],
+      },
+    })
     const targets = [...snipeTargets, ...watchTargets]
 
     // Fetch credentials separately — Neon HTTP adapter doesn't support nested includes
@@ -170,9 +188,10 @@ async function processResyTarget(target: TargetRow) {
     data: { status: isWatch ? "WATCHING" : "SNIPING", lastAttemptAt: new Date() },
   })
 
-  // Sleep until snipeAt if we picked it up early (pre-warm window)
+  // Sleep until snipeAt if we picked it up early (pre-warm window).
+  // Cap at 55s to stay within Vercel's 60s function timeout.
   if (!isWatch && target.snipeAt) {
-    const waitMs = target.snipeAt.getTime() - Date.now()
+    const waitMs = Math.min(target.snipeAt.getTime() - Date.now(), 55_000)
     if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs))
   }
 
@@ -231,9 +250,10 @@ async function processOTTarget(target: TargetRow) {
     data: { status: isWatch ? "WATCHING" : "SNIPING", lastAttemptAt: new Date() },
   })
 
-  // Sleep until snipeAt if we picked it up early (pre-warm window)
+  // Sleep until snipeAt if we picked it up early (pre-warm window).
+  // Cap at 55s to stay within Vercel's 60s function timeout.
   if (!isWatch && target.snipeAt) {
-    const waitMs = target.snipeAt.getTime() - Date.now()
+    const waitMs = Math.min(target.snipeAt.getTime() - Date.now(), 55_000)
     if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs))
   }
 

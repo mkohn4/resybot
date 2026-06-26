@@ -204,7 +204,7 @@ export async function bookOTSlot(
   }
   if (needsCC) {
     bookBody.creditCardLock = {
-      customerId: guest.cardToken,
+      token: guest.cardToken,
       paymentProviderType: "SPREEDLY",
       last4: guest.cardLast4,
     }
