@@ -19,17 +19,22 @@ A self-hosted bot that automatically snipes hard-to-get NYC restaurant reservati
 
 - **Resy + OpenTable** — snipe on both platforms from one interface; platform auto-detected per restaurant
 - **Google OAuth** login — no passwords to manage
-- **Encrypted credential storage** — Resy email/password and OT Bearer token stored with AES-256-GCM
-- **Curated NYC restaurant list** — 27 top Resy restaurants pre-loaded with known release times (Carbone, Lilia, Don Angie, 4 Charles, Atomix, Le Bernardin, and more)
+- **Encrypted credential storage** — Resy email/password, OT Bearer token, and OT wallet card token all stored with AES-256-GCM
+- **CC-hold restaurants** — OpenTable restaurants requiring a credit card hold are supported; your saved card is stored during OT onboarding
+- **Curated NYC restaurant list** — top NYC restaurants pre-loaded with known release times; includes both Resy and OT entries (e.g. Don Angie is OT-only, 7 days out at 9am)
 - **Auto-suggested snipe times** — the UI calculates the right moment based on each restaurant's drop schedule
-- **Smart slot selection** — prefers indoor seating, tries times in your priority order (8–8:30pm first, then 7:30–9pm), falls back gracefully
+- **Timezone-aware snipe input** — select ET/CT/MT/PT when scheduling; time is always displayed in ET on the dashboard
+- **Strict slot selection** — only books your specified preferred times, in order; no fallback to unselected times. Patio/outdoor seating always skipped
 - **10-second snipe window** — polls for 10 seconds around the release time for maximum chance of success
+- **Overlap handling** — if a slot fails due to an existing overlapping reservation, the next preferred time is tried automatically
 - **Watch mode** — polls every minute for cancellations on fully-booked restaurants
 - **Auto-fallback** — a missed SNIPE automatically switches to Watch mode rather than failing
 - **Email notifications** — success or failure emails via Resend (free tier)
 - **Multiple targets** — watch any number of restaurants simultaneously
-- **Venue lookup tool** — search Resy and OpenTable restaurants by name in one place
-- **Light/dark theme** — persisted via localStorage, no flash on load
+- **Venue lookup tool** — search Resy and OpenTable restaurants by name in one place; curated data (release time, days out) shown inline
+- **Deduplication** — curated entries and live search results are merged so the same restaurant never appears twice
+- **Dark mode default** — app always starts in dark mode
+- **Mobile-friendly nav** — all actions (Connect Resy, Connect OT, Venue Lookup, Sign Out) nested under the avatar dropdown
 - **Attempt history** — see every booking attempt per target in the dashboard
 
 ## Preferred time priority
@@ -51,9 +56,13 @@ Times are tried in the order you select them in the UI. Patio/outside/outdoor se
 | Styling | Tailwind CSS |
 | Hosting | Vercel |
 
-## Resy curated restaurants
+## Curated restaurants
 
-Pre-loaded with release time data for: Carbone, Don Angie, Lilia, 4 Charles Prime Rib, Rezdôra, Atomix, Jua, Torrisi, Frenchette, Le Bernardin, Laser Wolf, Gage & Tollner, Gramercy Tavern, Eleven Madison Park, The Grill, Nobu, Balthazar, Le Coucou, Dirty French, Crown Shy, Estela, Cosme, L'Artusi, Daniel, Jean-Georges, Ci Siamo, Momofuku Ko.
+Pre-loaded with release time data for 27 top NYC restaurants across Resy and OpenTable:
+
+**Resy:** Carbone, Lilia, 4 Charles Prime Rib, Rezdôra, Atomix, Jua, Torrisi, Frenchette, Le Bernardin, Laser Wolf, Gage & Tollner, Gramercy Tavern, Eleven Madison Park, The Grill, Nobu, Balthazar, Le Coucou, Dirty French, Crown Shy, Estela, Cosme, L'Artusi, Daniel, Jean-Georges, Ci Siamo, Momofuku Ko
+
+**OpenTable:** Don Angie (7 days out, 9am ET)
 
 ## Setup
 
@@ -113,7 +122,7 @@ OpenTable uses a Bearer token from the iOS app rather than a username/password. 
 2. Enable SSL proxying for `mobile-api.opentable.com`
 3. Open the OpenTable app and browse any restaurant
 4. Export a HAR file and find a request with `Authorization: Bearer <token>`
-5. Paste the token into ResyBot via **Connect OT** on the dashboard — it auto-fetches your name, phone, and loyalty ID
+5. Paste the token into ResyBot via **Connect OT** on the dashboard — it auto-fetches your name, phone, loyalty ID, and default saved card (for CC-hold restaurants)
 
 The token is long-lived (weeks to months). If OT booking starts failing with an auth error, reconnect with a fresh token.
 

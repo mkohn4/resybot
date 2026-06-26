@@ -8,7 +8,11 @@ const TAG_LENGTH = 16
 function getKey(): Buffer {
   const key = process.env.ENCRYPTION_KEY
   if (!key) throw new Error("ENCRYPTION_KEY not set")
-  return Buffer.from(key, "hex").subarray(0, KEY_LENGTH)
+  const buf = Buffer.from(key, "hex")
+  if (buf.length < KEY_LENGTH) {
+    throw new Error(`ENCRYPTION_KEY must be at least ${KEY_LENGTH} bytes (64 hex chars); got ${buf.length}`)
+  }
+  return buf.subarray(0, KEY_LENGTH)
 }
 
 export function encrypt(plaintext: string): string {

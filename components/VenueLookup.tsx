@@ -13,7 +13,8 @@ type VenueResult = {
   daysOut: number | null
   releaseTime: string | null
   releaseNotes: string
-  source: "curated" | "resy"
+  source: "curated" | "resy" | "opentable"
+  platform?: "resy" | "opentable"
 }
 
 function formatReleaseTime(r: { releaseTime: string | null; daysOut: number | null }) {
@@ -137,6 +138,11 @@ export function VenueLookup() {
                             curated
                           </span>
                         )}
+                        {(r.source === "opentable" || r.platform === "opentable") && (
+                          <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full">
+                            OpenTable
+                          </span>
+                        )}
                         {r.priceRange && <span className="text-gray-500 text-xs">{r.priceRange}</span>}
                       </div>
                       <p className="text-gray-400 text-xs mb-2">
@@ -150,7 +156,7 @@ export function VenueLookup() {
                       {r.releaseNotes && r.source === "curated" && (
                         <p className="text-gray-500 text-xs">{r.releaseNotes}</p>
                       )}
-                      {r.source === "resy" && (
+                      {(r.source === "resy" || r.source === "opentable") && !r.releaseTime && (
                         <p className="text-amber-400/70 text-xs">No release time data — set snipe time manually</p>
                       )}
                     </div>

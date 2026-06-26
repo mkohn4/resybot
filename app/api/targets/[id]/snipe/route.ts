@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { decrypt, encrypt } from "@/lib/crypto"
 import { resyLogin, findSlots, pickBestSlot, bookSlot } from "@/lib/resy"
-import { findOTSlots, pickBestOTSlot, bookOTSlot, OTOverlapError } from "@/lib/opentable"
+import { findOTSlots, pickBestOTSlot, bookOTSlot, OTOverlapError, OTAuthError } from "@/lib/opentable"
 import { sendBookingSuccess, sendBookingFailed } from "@/lib/notify"
 
 export async function POST(
@@ -97,7 +97,7 @@ async function handleResySnipe({ id, target, dateStr, stillFuture, userId }: {
     await prisma.reservationTarget.update({ where: { id }, data: { status: "BOOKED", bookedSlot: slot, lastAttemptAt: new Date() } })
     await prisma.snipeAttempt.create({ data: { targetId: id, success: true, slot } })
     if (target.notificationEmail) {
-      await sendBookingSuccess({ to: target.notificationEmail, restaurantName: target.venueName, date: dateStr, time, partySize: target.partySize }).catch((e) => console.error("[notify] email send failed", e))
+      await sendBookingSuccess({ to: target.notificationEmail, restaurantName: target.venueName, date: dateStr, time, partySize: target.partySize, platform: "RESY" }).catch((e) => console.error("[notify] email send failed", e))
     }
     return NextResponse.json({ success: true, slot, time })
   } catch (err: unknown) {
@@ -177,10 +177,20 @@ async function handleOTSnipe({ id, target, dateStr, stillFuture, userId }: {
     await prisma.reservationTarget.update({ where: { id }, data: { status: "BOOKED", bookedSlot: slot, lastAttemptAt: new Date() } })
     await prisma.snipeAttempt.create({ data: { targetId: id, success: true, slot } })
     if (target.notificationEmail) {
-      await sendBookingSuccess({ to: target.notificationEmail, restaurantName: target.venueName, date: dateStr, time, partySize: target.partySize }).catch((e) => console.error("[notify] email send failed", e))
+      await sendBookingSuccess({ to: target.notificationEmail, restaurantName: target.venueName, date: dateStr, time, partySize: target.partySize, platform: "OPENTABLE" }).catch((e) => console.error("[notify] email send failed", e))
     }
     return NextResponse.json({ success: true, slot, time })
   } catch (err: unknown) {
+    // Expired bearer token — mark FAILED and tell the user to reconnect
+    if (err instanceof OTAuthError) {
+      console.error("[snipe/ot] auth error — token expired", { targetId: id, userId })
+      await prisma.reservationTarget.update({ where: { id }, data: { status: "FAILED" } })
+      await prisma.snipeAttempt.create({ data: { targetId: id, success: false, error: err.message } })
+      if (target.notificationEmail) {
+        await sendBookingFailed({ to: target.notificationEmail, restaurantName: target.venueName, date: dateStr, error: err.message, platform: "OPENTABLE" }).catch((e) => console.error("[notify] email send failed", e))
+      }
+      return NextResponse.json({ success: false, message: err.message }, { status: 401 })
+    }
     const error = err instanceof Error ? err.message : String(err)
     console.error("[snipe/ot] booking error", { targetId: id, error })
     await prisma.reservationTarget.update({ where: { id }, data: stillFuture ? { status: "WATCHING", mode: "WATCH" } : { status: "FAILED" } })

@@ -80,10 +80,3 @@ export async function POST(req: NextRequest) {
     },
   })
 }
-
-// Internal helper — decrypts bearer token for use in booking flows
-export async function getDecryptedBearerToken(userId: string): Promise<string | null> {
-  const profile = await prisma.oTGuestProfile.findUnique({ where: { userId } })
-  if (!profile?.encryptedBearerToken) return null
-  return decrypt(profile.encryptedBearerToken)
-}

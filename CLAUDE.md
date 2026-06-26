@@ -49,18 +49,18 @@ Auth: Bearer token extracted from iOS app via Proxyman HAR capture (no client_id
 - Slots are at `data.availability.availability.timeslots` — NOT `data.suggestedAvailability` (which is always empty)
 - The `availabilityToken` query param MUST be set to `eyJ2IjozLCJtIjowLCJwIjowLCJzIjowLCJuIjowfQ` (base64 of `{"v":3,"m":0,"p":0,"s":0,"n":0}`) — without it, the API returns 0 slots
 - The `diningAreaId` in lock/book must come from `slot.diningAreas[0].id` (real ID like `"100618"`), NOT hardcoded `"1"` — using `"1"` causes `NOT_AVAILABLE` from the lock endpoint
-- Some restaurants require a credit card hold (`requiresCreditCard: true, creditCardPolicyType: "HOLD"`) — booking those requires a Stripe card token, which we don't currently support; the bot skips them gracefully
+- Some restaurants require a credit card hold (`requiresCreditCard: true, creditCardPolicyType: "HOLD"`) — the user's default wallet card (Spreedly token) is fetched during onboarding and stored encrypted; passed as `creditCardLock` in the lock and book requests
 - Two-step booking: lock slot → POST reservation (lock expires after ~30s)
-- User profile (gpid, customerId, phone) fetched automatically during OT onboarding via `GET /api/v3/user/`
+- User profile (gpid, customerId, phone, default wallet card) fetched automatically during OT onboarding via `GET /api/v3/user/?loadInvitations=1`
 
 **Endpoints in use:**
-- User profile: `GET /api/v3/user/?loadInvitations=0`
+- User profile: `GET /api/v3/user/?loadInvitations=1`
 - Availability: `GET /api/v3/restaurant/{id}?dateTime=...&partySize=...&availabilityToken=...&allowPop=true&partnerId=84&...`
 - Lock: `POST /api/v1/reservation/{restaurantId}/lock`
 - Book: `POST /api/v3/reservation/{restaurantId}`
 - Search: `PUT /api/v4/personalize/autocompleteInterspersed`
 
-**OT onboarding flow:** User pastes bearer token into OTProfileModal → app calls `POST /api/ot-profile` → fetches `GET /api/v3/user/` → stores encrypted bearer + gpid + customerId + phone in `OTGuestProfile`
+**OT onboarding flow:** User pastes bearer token into OTProfileModal → app calls `POST /api/ot-profile` → fetches `GET /api/v3/user/?loadInvitations=1` → stores encrypted bearer + gpid + customerId + phone + default wallet card (Spreedly token + last4) in `OTGuestProfile`
 
 **Bearer token expiry:** Unknown — likely long-lived (weeks/months). If booking starts failing with 401, user must re-paste a fresh token from Proxyman.
 
@@ -69,7 +69,7 @@ Auth: Bearer token extracted from iOS app via Proxyman HAR capture (no client_id
 Default order (8–8:30pm first, then 7:30–9pm):
 `["20:00", "20:15", "20:30", "19:30", "19:45", "20:45", "21:00"]`
 
-Times are tried in array order — **NO automatic sort**. The UI preserves click order. Patio/outside/outdoor table types are always skipped. Fallback: first non-patio slot in the 6:30pm–9pm window.
+Times are tried in array order — **NO automatic sort**. The UI preserves click order. Patio/outside/outdoor table types are always skipped. **No fallback** — if none of the preferred times have a slot, nothing is booked (fallback was removed to prevent booking unwanted times).
 
 ## Watch mode expiry
 
@@ -95,16 +95,18 @@ Platform:     RESY | OPENTABLE
 | `lib/opentable.ts` | OpenTable mobile API client — findOTSlots, pickBestOTSlot, bookOTSlot, searchOTVenues |
 | `lib/db.ts` | Prisma client with PrismaNeon WebSocket adapter |
 | `lib/crypto.ts` | AES-256-GCM encrypt/decrypt |
-| `lib/restaurants.ts` | 27 curated NYC restaurants + `suggestSnipeTime()` |
+| `lib/restaurants.ts` | 27 curated NYC restaurants + `suggestSnipeTime()`. Includes `platform` field — Don Angie is OT-only |
 | `lib/notify.ts` | Lazy Resend email notifications |
 | `lib/auth.ts` | NextAuth v5 config |
 | `app/api/cron/snipe/route.ts` | Cron handler — processes SNIPE + WATCH targets for both platforms, auto-fallback |
 | `app/api/targets/[id]/snipe/route.ts` | On-demand immediate snipe with auto-fallback (Resy + OT) |
 | `app/api/venues/lookup/route.ts` | Venue search — curated list + Resy live search + OT mobile autocomplete |
-| `app/api/ot-profile/route.ts` | GET/POST OT profile — stores encrypted bearer token, fetches profile from OT API |
-| `components/AddTargetModal.tsx` | Add target UI — Scheduled / Book Now / Watch modes, auto-detects Resy vs OT |
-| `components/TargetCard.tsx` | Dashboard card — Try Now, Stop, fallback messaging |
-| `components/OTProfileModal.tsx` | OT onboarding — paste bearer token, displays fetched name as confirmation |
+| `app/api/ot-profile/route.ts` | GET/POST OT profile — stores encrypted bearer + wallet card token; returns `cardLast4` |
+| `components/AddTargetModal.tsx` | Add target UI — Scheduled / Book Now / Watch modes; timezone selector (ET/CT/MT/PT); ✕ close button |
+| `components/TargetCard.tsx` | Dashboard card — snipe time always displayed in ET |
+| `components/OTProfileModal.tsx` | OT onboarding — paste bearer token; ✕ close button |
+| `components/CredentialsModal.tsx` | Resy credentials modal — ✕ close button |
+| `components/DashboardClient.tsx` | Dashboard shell — avatar dropdown menu (Resy, OT, Lookup, Sign out); dark mode default |
 | `components/VenueLookup.tsx` | Venue lookup tool with curated sidebar |
 | `proxy.ts` | Next.js 16 auth proxy (formerly middleware.ts) |
 | `prisma.config.ts` | Loads `.env.local` for Prisma CLI commands |
@@ -121,12 +123,6 @@ Header: `Authorization: Bearer <CRON_SECRET>`
 
 OT stores `bookedSlot` as `"2026-07-10T20:00"` (ISO with `T`). Resy stores it as `"2026-07-10 20:00:00"` (space-separated). Any time display code must handle both — use `split("T")[1] ?? split(" ")[1]` to extract the time portion, and guard against `NaN` from `parseInt`.
 
-## Planned: SevenRooms support (Phase 3)
+## SevenRooms — SKIPPED
 
-Full plan in memory (`project_sevenrooms_plan.md`). After Resy + OpenTable.
-
-- No consumer login — widget-based per restaurant
-- `venue_group_client_id` extractable from DevTools (no mitmproxy needed)
-- **Blocked by Cloudflare** — requires Playwright headless browser, not raw fetch
-- Poll every 30–60s (slower than Resy)
-- Most SevenRooms restaurants are also on Resy, so lower urgency
+Tested 2026-06-25. Steps 1–5 (CSRF, widget info, availability, hold, Stripe setup intent) all work with plain fetch. The book endpoint returns `{"errors":["ReCaptcha server-side validation failed."]}` regardless — server-side reCAPTCHA v3 is required and cannot be bypassed without a real browser or a paid captcha-solving service. Most SR restaurants are also on Resy or OpenTable, so not worth the added complexity. No plans to implement.

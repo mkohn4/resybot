@@ -1,4 +1,4 @@
-const RESY_API_KEY = "VbWk7s3L4KiK5fzlO7JD3Q5EYolJI7n5"
+export const RESY_API_KEY = "VbWk7s3L4KiK5fzlO7JD3Q5EYolJI7n5"
 
 const BASE_HEADERS = {
   origin: "https://resy.com",

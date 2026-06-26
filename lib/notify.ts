@@ -12,8 +12,10 @@ export async function sendBookingSuccess(opts: {
   date: string
   time: string
   partySize: number
+  platform?: string
 }) {
-  const { to, restaurantName, date, time, partySize } = opts
+  const { to, restaurantName, date, time, partySize, platform } = opts
+  const account = platform === "OPENTABLE" ? "OpenTable" : "Resy"
   await resend().emails.send({
     from: FROM,
     to,
@@ -24,7 +26,7 @@ export async function sendBookingSuccess(opts: {
       <p><strong>Date:</strong> ${date}</p>
       <p><strong>Time:</strong> ${time}</p>
       <p><strong>Party size:</strong> ${partySize}</p>
-      <p>Check your Resy account for full details.</p>
+      <p>Check your ${account} account for full details.</p>
     `,
   })
 }

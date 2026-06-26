@@ -58,6 +58,7 @@ export function TargetCard({
   const [expanded, setExpanded] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [sniping, setSniping] = useState(false)
+  const [stopping, setStopping] = useState(false)
   const [snipeResult, setSnipeResult] = useState<{ success: boolean; message?: string; slot?: string; fallbackToWatch?: boolean } | null>(null)
 
   const reservationDate = new Date(target.date).toLocaleDateString("en-US", {
@@ -83,7 +84,7 @@ export function TargetCard({
         const t = (target.bookedSlot.split("T")[1] ?? target.bookedSlot.split(" ")[1] ?? "").substring(0, 5)
         const [h, m] = t.split(":").map(Number)
         if (isNaN(h) || isNaN(m)) return null
-        return `${h > 12 ? h - 12 : h}:${m.toString().padStart(2, "0")}${h >= 12 ? "pm" : "am"}`
+        return `${h === 0 ? 12 : h > 12 ? h - 12 : h}:${m.toString().padStart(2, "0")}${h >= 12 ? "pm" : "am"}`
       })()
     : null
 
@@ -93,12 +94,23 @@ export function TargetCard({
   }
 
   async function handleStopWatching() {
-    await fetch(`/api/targets/${target.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "CANCELLED" }),
-    })
-    onRefresh()
+    setStopping(true)
+    try {
+      const res = await fetch(`/api/targets/${target.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "CANCELLED" }),
+      })
+      if (!res.ok) {
+        setSnipeResult({ success: false, message: "Could not stop watching — try again" })
+        return
+      }
+      onRefresh()
+    } catch {
+      setSnipeResult({ success: false, message: "Could not stop watching — try again" })
+    } finally {
+      setStopping(false)
+    }
   }
 
   async function handleTryNow() {
@@ -156,12 +168,13 @@ export function TargetCard({
           {target.status === "WATCHING" && (
             <button
               onClick={handleStopWatching}
-              className="text-xs bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 px-2.5 py-1 rounded-lg transition-colors"
+              disabled={stopping}
+              className="text-xs bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 px-2.5 py-1 rounded-lg transition-colors disabled:opacity-40"
             >
-              Stop
+              {stopping ? "Stopping…" : "Stop"}
             </button>
           )}
-          {target.status !== "BOOKED" && target.status !== "WATCHING" && (
+          {(target.status === "PENDING" || target.status === "SNIPING") && (
             <button
               onClick={handleTryNow}
               disabled={sniping || target.status === "SNIPING"}
@@ -189,7 +202,7 @@ export function TargetCard({
             : "border-red-500/30 bg-red-500/10 text-red-400"
         }`}>
           {snipeResult.success
-            ? `Booked! ${snipeResult.slot ? (() => { const t = (snipeResult.slot!.split("T")[1] ?? snipeResult.slot!.split(" ")[1] ?? "").substring(0,5); const [h,m] = t.split(":").map(Number); return isNaN(h)||isNaN(m) ? "" : `${h>12?h-12:h}:${m.toString().padStart(2,"0")}${h>=12?"pm":"am"}` })() : ""}`
+            ? `Booked! ${snipeResult.slot ? (() => { const t = (snipeResult.slot!.split("T")[1] ?? snipeResult.slot!.split(" ")[1] ?? "").substring(0,5); const [h,m] = t.split(":").map(Number); return isNaN(h)||isNaN(m) ? "" : `${h===0?12:h>12?h-12:h}:${m.toString().padStart(2,"0")}${h>=12?"pm":"am"}` })() : ""}`
             : snipeResult.fallbackToWatch
             ? "No slots now — switched to Watch mode for cancellations"
             : `No slots available: ${snipeResult.message}`
@@ -204,7 +217,7 @@ export function TargetCard({
             <div className="flex flex-wrap gap-1.5">
               {target.preferredTimes.map((t) => {
                 const [h, m] = t.split(":").map(Number)
-                const label = isNaN(h) || isNaN(m) ? t : `${h > 12 ? h - 12 : h}:${m.toString().padStart(2, "0")}${h >= 12 ? "pm" : "am"}`
+                const label = isNaN(h) || isNaN(m) ? t : `${h === 0 ? 12 : h > 12 ? h - 12 : h}:${m.toString().padStart(2, "0")}${h >= 12 ? "pm" : "am"}`
                 return (
                   <span key={t} className="bg-gray-800 text-gray-300 text-xs px-2 py-0.5 rounded">
                     {label}

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { NYC_RESTAURANTS } from "@/lib/restaurants"
 import { searchOTVenues } from "@/lib/opentable"
+import { RESY_API_KEY } from "@/lib/resy"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { decrypt } from "@/lib/crypto"
 
-const RESY_API_KEY = "VbWk7s3L4KiK5fzlO7JD3Q5EYolJI7n5"
 const PRICE_LABELS: Record<number, string> = { 1: "$", 2: "$$", 3: "$$$", 4: "$$$$" }
 
 export async function GET(req: NextRequest) {

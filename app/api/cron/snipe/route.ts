@@ -5,6 +5,10 @@ import { resyLogin, findSlots, pickBestSlot, bookSlot } from "@/lib/resy"
 import { findOTSlots, pickBestOTSlot, bookOTSlot, OTOverlapError, OTAuthError } from "@/lib/opentable"
 import { sendBookingSuccess, sendBookingFailed } from "@/lib/notify"
 
+// Worst case: ~55s pre-warm sleep + ~30s polling window. Set generously
+// above that so Vercel never kills the function mid-snipe.
+export const maxDuration = 120
+
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization")
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -173,7 +177,8 @@ async function processResyTarget(target: TargetRow) {
       where: { userId: target.userId },
       data: {
         encryptedAuthToken: encrypt(authToken),
-        paymentMethodId: freshAuth.paymentMethodId,
+        // Don't clobber a good payment method if the refresh login returns none
+        paymentMethodId: freshAuth.paymentMethodId ?? cred.paymentMethodId,
         tokenExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       },
     })
@@ -215,7 +220,7 @@ async function processResyTarget(target: TargetRow) {
         await prisma.snipeAttempt.create({ data: { targetId: target.id, success: true, slot } })
         if (target.notificationEmail) {
           const time = slot.split(" ")[1]?.substring(0, 5) ?? ""
-          await sendBookingSuccess({ to: target.notificationEmail, restaurantName: target.venueName, date: dateStr, time, partySize: target.partySize }).catch((e) => console.error("[notify] email send failed", e))
+          await sendBookingSuccess({ to: target.notificationEmail, restaurantName: target.venueName, date: dateStr, time, partySize: target.partySize, platform: "RESY" }).catch((e) => console.error("[notify] email send failed", e))
         }
         return { success: true, slot }
       }
@@ -301,7 +306,7 @@ async function processOTTarget(target: TargetRow) {
           await prisma.snipeAttempt.create({ data: { targetId: target.id, success: true, slot } })
           if (target.notificationEmail) {
             const time = slot.split("T")[1]?.substring(0, 5) ?? ""
-            await sendBookingSuccess({ to: target.notificationEmail, restaurantName: target.venueName, date: dateStr, time, partySize: target.partySize }).catch((e) => console.error("[notify] email send failed", e))
+            await sendBookingSuccess({ to: target.notificationEmail, restaurantName: target.venueName, date: dateStr, time, partySize: target.partySize, platform: "OPENTABLE" }).catch((e) => console.error("[notify] email send failed", e))
           }
           return { success: true, slot }
         }

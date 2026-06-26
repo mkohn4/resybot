@@ -43,14 +43,24 @@ export function DashboardClient({ user, initialTargets, hasCredentials, hasOTPro
   const [otProfileSaved, setOTProfileSaved] = useState(hasOTProfile)
 
   async function refreshTargets() {
-    const res = await fetch("/api/targets")
-    const data = await res.json()
-    setTargets(data)
+    try {
+      const res = await fetch("/api/targets")
+      if (!res.ok) return
+      const data = await res.json()
+      if (Array.isArray(data)) setTargets(data)
+    } catch {
+      // network error — keep the current list
+    }
   }
 
   async function deleteTarget(id: string) {
-    await fetch(`/api/targets/${id}`, { method: "DELETE" })
-    setTargets((prev) => prev.filter((t) => t.id !== id))
+    try {
+      const res = await fetch(`/api/targets/${id}`, { method: "DELETE" })
+      if (!res.ok) return // leave the card in place if the delete failed
+      setTargets((prev) => prev.filter((t) => t.id !== id))
+    } catch {
+      // network error — leave the card; user can retry
+    }
   }
 
   const [menuOpen, setMenuOpen] = useState(false)
