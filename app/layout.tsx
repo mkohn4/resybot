@@ -1,4 +1,4 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { Geist } from "next/font/google"
 import "./globals.css"
 import { Providers } from "./providers"
@@ -7,7 +7,17 @@ const geist = Geist({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "ResyBot",
-  description: "Auto-snipe NYC restaurant reservations on Resy",
+  description: "Auto-snipe NYC restaurant reservations on Resy & OpenTable",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "ResyBot",
+    statusBarStyle: "black-translucent",
+  },
+}
+
+export const viewport: Viewport = {
+  themeColor: "#0a0a0a",
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
