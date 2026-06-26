@@ -14,12 +14,20 @@ export async function GET(req: NextRequest) {
   try {
     const now = new Date()
     const twoMinsAgo = new Date(now.getTime() - 2 * 60 * 1000)
+    // Look 65s ahead so the tick before a snipe picks it up and sleeps into position
+    const lookAhead = new Date(now.getTime() + 65 * 1000)
+
+    // Reset any SNIPING targets whose function crashed mid-sleep (stuck >5 min past snipeAt)
+    await prisma.reservationTarget.updateMany({
+      where: { status: "SNIPING", snipeAt: { lt: new Date(now.getTime() - 5 * 60 * 1000) } },
+      data: { status: "WATCHING", mode: "WATCH" },
+    })
 
     // Neon HTTP adapter doesn't support OR clauses (triggers implicit transactions)
     // Run two separate queries and merge
     const [snipeTargets, watchTargets] = await Promise.all([
       prisma.reservationTarget.findMany({
-        where: { status: "PENDING", mode: "SNIPE", snipeAt: { gte: twoMinsAgo, lte: now } },
+        where: { status: "PENDING", mode: "SNIPE", snipeAt: { gte: twoMinsAgo, lte: lookAhead } },
       }),
       prisma.reservationTarget.findMany({
         where: { status: "WATCHING", mode: "WATCH", date: { gte: now } },
@@ -91,6 +99,7 @@ export type TargetRow = {
   venueId: number
   venueName: string
   date: Date
+  snipeAt: Date | null
   partySize: number
   preferredTimes: string[]
   mode: string
@@ -161,6 +170,12 @@ async function processResyTarget(target: TargetRow) {
     data: { status: isWatch ? "WATCHING" : "SNIPING", lastAttemptAt: new Date() },
   })
 
+  // Sleep until snipeAt if we picked it up early (pre-warm window)
+  if (!isWatch && target.snipeAt) {
+    const waitMs = target.snipeAt.getTime() - Date.now()
+    if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs))
+  }
+
   const deadline = isWatch ? Date.now() + 1_000 : Date.now() + 10_000
   let lastError = ""
 
@@ -215,6 +230,12 @@ async function processOTTarget(target: TargetRow) {
     where: { id: target.id },
     data: { status: isWatch ? "WATCHING" : "SNIPING", lastAttemptAt: new Date() },
   })
+
+  // Sleep until snipeAt if we picked it up early (pre-warm window)
+  if (!isWatch && target.snipeAt) {
+    const waitMs = target.snipeAt.getTime() - Date.now()
+    if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs))
+  }
 
   const deadline = isWatch ? Date.now() + 1_000 : Date.now() + 10_000
   let lastError = ""
