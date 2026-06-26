@@ -43,3 +43,6 @@ next-env.d.ts
 /app/generated/prisma
 *.har
 /HARlogs/
+
+# claude code local settings
+.claude/settings.local.json
