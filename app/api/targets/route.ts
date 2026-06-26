@@ -26,20 +26,65 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
   }
 
+  // Validate venueId
+  const venueIdNum = Number(venueId)
+  if (!Number.isInteger(venueIdNum) || venueIdNum <= 0) {
+    return NextResponse.json({ error: "Invalid venue ID" }, { status: 400 })
+  }
+
+  // Validate party size (1–20)
+  const partySizeNum = Number(partySize ?? 2)
+  if (!Number.isInteger(partySizeNum) || partySizeNum < 1 || partySizeNum > 20) {
+    return NextResponse.json({ error: "Party size must be between 1 and 20" }, { status: 400 })
+  }
+
+  // Validate dates parse correctly
+  const dateObj = new Date(date)
+  const snipeAtObj = new Date(snipeAt)
+  if (Number.isNaN(dateObj.getTime()) || Number.isNaN(snipeAtObj.getTime())) {
+    return NextResponse.json({ error: "Invalid date" }, { status: 400 })
+  }
+
   const isWatch = mode === "WATCH"
+
+  // Reject reservation dates before today. The date is stored as noon, so a same-day
+  // booking (e.g. "Book Now for tonight") is still allowed even if it's already past
+  // noon — we only block dates that fall on a prior calendar day.
+  if (dateObj.getTime() < Date.now() - 24 * 60 * 60 * 1000) {
+    return NextResponse.json({ error: "Reservation date must not be in the past" }, { status: 400 })
+  }
+
+  // Preferred times: use provided non-empty array, else fall back to defaults
+  const times = Array.isArray(preferredTimes) && preferredTimes.length > 0
+    ? preferredTimes
+    : ["20:00", "20:15", "20:30", "19:30", "19:45", "20:45", "21:00"]
+
+  // Confirm the user has the credential for the chosen platform
+  const targetPlatform = platform === "OPENTABLE" ? "OPENTABLE" : "RESY"
+  if (targetPlatform === "OPENTABLE") {
+    const otProfile = await prisma.oTGuestProfile.findUnique({ where: { userId: session.user.id } })
+    if (!otProfile?.encryptedBearerToken) {
+      return NextResponse.json({ error: "Connect your OpenTable account before adding an OpenTable target" }, { status: 400 })
+    }
+  } else {
+    const cred = await prisma.resyCredential.findUnique({ where: { userId: session.user.id } })
+    if (!cred) {
+      return NextResponse.json({ error: "Connect your Resy account before adding a Resy target" }, { status: 400 })
+    }
+  }
 
   const target = await prisma.reservationTarget.create({
     data: {
       userId: session.user.id,
-      platform: platform === "OPENTABLE" ? "OPENTABLE" : "RESY",
-      venueId: Number(venueId),
+      platform: targetPlatform,
+      venueId: venueIdNum,
       venueName,
       neighborhood,
       cuisine,
-      date: new Date(date),
-      partySize: Number(partySize ?? 2),
-      preferredTimes: preferredTimes ?? ["20:00", "20:15", "20:30", "19:30", "19:45", "20:45", "21:00"],
-      snipeAt: new Date(snipeAt),
+      date: dateObj,
+      partySize: partySizeNum,
+      preferredTimes: times,
+      snipeAt: snipeAtObj,
       mode: isWatch ? "WATCH" : "SNIPE",
       status: isWatch ? "WATCHING" : "PENDING",
       notificationEmail: notificationEmail ?? session.user.email,

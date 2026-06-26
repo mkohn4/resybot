@@ -88,7 +88,7 @@ export async function findOTSlots(
   url.searchParams.set("requestTicket", "true")
   url.searchParams.set("stats", "numBooked")
 
-  const res = await fetch(url.toString(), { headers: mobileHeaders(bearerToken) })
+  const res = await fetch(url.toString(), { headers: mobileHeaders(bearerToken), signal: AbortSignal.timeout(3000) })
   if (!res.ok) {
     if (res.status === 401) throw new OTAuthError()
     throw new Error(`OT findSlots failed: ${res.status}`)
@@ -177,6 +177,7 @@ export async function bookOTSlot(
     method: "POST",
     headers: mobileHeaders(bearerToken),
     body: JSON.stringify(lockBody),
+    signal: AbortSignal.timeout(5000),
   })
   if (!lockRes.ok) {
     const err = await lockRes.text()
@@ -222,6 +223,7 @@ export async function bookOTSlot(
     method: "POST",
     headers: mobileHeaders(bearerToken),
     body: JSON.stringify(bookBody),
+    signal: AbortSignal.timeout(5000),
   })
   if (!bookRes.ok) {
     const errText = await bookRes.text()

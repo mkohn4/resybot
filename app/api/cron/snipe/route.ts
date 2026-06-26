@@ -45,14 +45,17 @@ export async function GET(req: NextRequest) {
         AND "snipeAt" <= ${lookAhead}
       RETURNING *
     `
-    // For WATCH targets, use a recency guard: skip targets processed in the last 45s
-    // to prevent concurrent cron ticks from processing the same target twice
+    // For WATCH targets, use a 20s recency guard. This prevents two near-simultaneous
+    // cron invocations from processing the same target twice, while being short enough
+    // that a second cron offset by ~30s can still poll watch targets every ~30s
+    // (rather than blocking it for a full minute). A watch poll takes ~1-2s, so 20s
+    // comfortably exceeds any real overlap window.
     const watchTargets = await prisma.reservationTarget.findMany({
       where: {
         status: "WATCHING", mode: "WATCH", date: { gte: now },
         OR: [
           { lastAttemptAt: null },
-          { lastAttemptAt: { lt: new Date(now.getTime() - 45_000) } },
+          { lastAttemptAt: { lt: new Date(now.getTime() - 20_000) } },
         ],
       },
     })
@@ -195,10 +198,11 @@ async function processResyTarget(target: TargetRow) {
     data: { status: isWatch ? "WATCHING" : "SNIPING", lastAttemptAt: new Date() },
   })
 
-  // Sleep until snipeAt if we picked it up early (pre-warm window).
-  // Cap at 55s to stay within Vercel's 60s function timeout.
+  // Sleep until snipeAt if we picked it up early (pre-warm window). The claim
+  // window is 65s, so the wait is never more than ~65s; cap at 110s as a safety
+  // bound under the 120s maxDuration (leaves room for the 30s polling window).
   if (!isWatch && target.snipeAt) {
-    const waitMs = Math.min(target.snipeAt.getTime() - Date.now(), 55_000)
+    const waitMs = Math.min(target.snipeAt.getTime() - Date.now(), 110_000)
     if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs))
   }
 
@@ -258,10 +262,11 @@ async function processOTTarget(target: TargetRow) {
     data: { status: isWatch ? "WATCHING" : "SNIPING", lastAttemptAt: new Date() },
   })
 
-  // Sleep until snipeAt if we picked it up early (pre-warm window).
-  // Cap at 55s to stay within Vercel's 60s function timeout.
+  // Sleep until snipeAt if we picked it up early (pre-warm window). The claim
+  // window is 65s, so the wait is never more than ~65s; cap at 110s as a safety
+  // bound under the 120s maxDuration (leaves room for the 30s polling window).
   if (!isWatch && target.snipeAt) {
-    const waitMs = Math.min(target.snipeAt.getTime() - Date.now(), 55_000)
+    const waitMs = Math.min(target.snipeAt.getTime() - Date.now(), 110_000)
     if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs))
   }
 

@@ -288,27 +288,38 @@ export function getRestaurantByVenueId(venueId: number): Restaurant | undefined 
   return NYC_RESTAURANTS.find((r) => r.venueId === venueId)
 }
 
-export function suggestSnipeTime(restaurant: Restaurant, targetDate: Date): Date | null {
-  if (!restaurant.releaseTime || restaurant.daysOut === 0) return null
-
-  const snipeDate = new Date(targetDate)
-  snipeDate.setDate(snipeDate.getDate() - restaurant.daysOut)
-
-  const [hours, minutes] = restaurant.releaseTime.split(":").map(Number)
-
-  // Determine the real ET→UTC offset for snipeDate (handles EDT vs EST automatically)
+// How far ET is ahead of UTC at a given instant, in ms (negative — ET is behind UTC).
+// Computed from Intl so it's correct for both EDT and EST, independent of the
+// runtime's own local timezone (Vercel runs in UTC).
+function etOffsetMs(utcMs: number): number {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
     year: "numeric", month: "2-digit", day: "2-digit",
     hour: "2-digit", minute: "2-digit", second: "2-digit",
     hour12: false,
-  }).formatToParts(new Date(snipeDate.getFullYear(), snipeDate.getMonth(), snipeDate.getDate(), 12, 0, 0))
+  }).formatToParts(new Date(utcMs))
   const p = Object.fromEntries(parts.map(({ type, value }) => [type, value]))
-  const localNoon = new Date(`${p.year}-${p.month}-${p.day}T12:00:00`)
-  const utcNoon = new Date(Date.UTC(snipeDate.getFullYear(), snipeDate.getMonth(), snipeDate.getDate(), 12, 0, 0))
-  const offsetHours = (utcNoon.getTime() - localNoon.getTime()) / 3_600_000
+  const hour = p.hour === "24" ? 0 : Number(p.hour)
+  const asIfUtc = Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day), hour, Number(p.minute), Number(p.second))
+  return asIfUtc - utcMs
+}
 
-  snipeDate.setUTCHours(hours + offsetHours, minutes, 0, 0)
+// Given an ET wall-clock time (y, mo, d, h, mi), return the corresponding UTC instant.
+function etWallClockToUTC(y: number, mo: number, d: number, h: number, mi: number): Date {
+  const guess = Date.UTC(y, mo, d, h, mi, 0)
+  // Subtract the ET offset at that instant to get true UTC. One correction is exact
+  // except within the ~1h DST transition window, which never coincides with a drop time.
+  return new Date(guess - etOffsetMs(guess))
+}
 
-  return snipeDate
+export function suggestSnipeTime(restaurant: Restaurant, targetDate: Date): Date | null {
+  if (!restaurant.releaseTime || restaurant.daysOut === 0) return null
+
+  const release = new Date(targetDate)
+  release.setDate(release.getDate() - restaurant.daysOut)
+
+  const [hours, minutes] = restaurant.releaseTime.split(":").map(Number)
+
+  // releaseTime is an ET wall-clock time on the release date — convert to the UTC instant
+  return etWallClockToUTC(release.getFullYear(), release.getMonth(), release.getDate(), hours, minutes)
 }

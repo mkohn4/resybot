@@ -55,6 +55,7 @@ export async function findSlots(
   })
   const res = await fetch(`https://api.resy.com/4/find?${params}`, {
     headers: BASE_HEADERS,
+    signal: AbortSignal.timeout(3000),
   })
   if (!res.ok) throw new Error(`findSlots failed: ${res.status}`)
   const data = await res.json()
@@ -68,22 +69,28 @@ export function pickBestSlot(
   preferredTimes: string[], // ["19:30", "19:45", ...]
   date: string
 ): ResySlot | null {
-  // Build a map of time -> slot for quick lookup
+  const isPatio = (slot: ResySlot) => {
+    const t = slot.config.type?.toLowerCase() ?? ""
+    return t.includes("patio") || t.includes("outside") || t.includes("outdoor")
+  }
+
+  // Build a map of time -> slot. If multiple slots share a time, prefer a
+  // non-patio slot so a later patio entry doesn't mask a bookable indoor one.
   const slotByTime: Record<string, ResySlot> = {}
   for (const slot of slots) {
     const start = slot.date.start // "2024-03-15 19:30:00"
     const time = start.split(" ")[1]?.substring(0, 5) // "19:30"
-    if (time) slotByTime[time] = slot
+    if (!time) continue
+    const existing = slotByTime[time]
+    if (!existing || (isPatio(existing) && !isPatio(slot))) {
+      slotByTime[time] = slot
+    }
   }
 
-  // Return first preferred time that has a slot and is not patio/outside
+  // Return first preferred time that has a non-patio slot
   for (const t of preferredTimes) {
     const slot = slotByTime[t]
-    if (!slot) continue
-    const tableType = slot.config.type?.toLowerCase() ?? ""
-    if (tableType.includes("patio") || tableType.includes("outside") || tableType.includes("outdoor")) {
-      continue
-    }
+    if (!slot || isPatio(slot)) continue
     return slot
   }
 
@@ -105,6 +112,7 @@ export async function bookSlot(
   })
   const detailRes = await fetch(`https://api.resy.com/3/details?${detailParams}`, {
     headers: BASE_HEADERS,
+    signal: AbortSignal.timeout(5000),
   })
   if (!detailRes.ok) throw new Error(`getDetails failed: ${detailRes.status}`)
   const details = await detailRes.json()
@@ -120,6 +128,7 @@ export async function bookSlot(
     method: "POST",
     headers: { ...BASE_HEADERS, "x-resy-auth-token": authToken },
     body: bookBody.toString(),
+    signal: AbortSignal.timeout(5000),
   })
   if (!bookRes.ok) {
     const errText = await bookRes.text()
