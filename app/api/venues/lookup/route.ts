@@ -43,7 +43,11 @@ export async function GET(req: NextRequest) {
   )
 
   // Search Resy live
-  let resyResults: typeof curated = []
+  let resyResults: {
+    venueId: number | null; name: string; neighborhood: string; cuisine: string
+    priceRange: string; daysOut: number | null; releaseTime: string | null; releaseNotes: string
+    platform: "resy"; source: "resy"
+  }[] = []
   if (!platformFilter || platformFilter === "resy") {
     try {
       const res = await fetch("https://api.resy.com/3/venuesearch/search", {
@@ -62,21 +66,28 @@ export async function GET(req: NextRequest) {
       if (res.ok) {
         const data = await res.json()
         const hits = data?.search?.hits ?? []
-        const curatedIds = new Set(curated.map((r) => r.venueId))
         resyResults = hits
-          .filter((v: { id?: { resy?: number } }) => !curatedIds.has(v?.id?.resy ?? null))
-          .map((v: { id?: { resy?: number }; name?: string; neighborhood?: string; cuisine?: string[]; price_range_id?: number }) => ({
-            venueId: v?.id?.resy ?? null,
-            name: v?.name ?? "Unknown",
-            neighborhood: v?.neighborhood ?? "NYC",
-            cuisine: v?.cuisine?.[0] ?? "",
-            priceRange: PRICE_LABELS[v?.price_range_id ?? 0] ?? "",
-            daysOut: null,
-            releaseTime: null,
-            releaseNotes: "No release time data — set snipe time manually",
-            platform: "resy" as const,
-            source: "resy" as const,
-          }))
+          .map((v: { id?: { resy?: number }; name?: string; neighborhood?: string; cuisine?: string[]; price_range_id?: number }) => {
+            // Enrich live Resy results with curated release-time data by name.
+            // Curated venue IDs are intentionally null (Resy reassigns them);
+            // the live search provides the correct, current venue ID.
+            const name = v?.name ?? "Unknown"
+            const curatedMatch = NYC_RESTAURANTS.find(
+              (r) => (r.platform ?? "resy") === "resy" && r.name.toLowerCase() === name.toLowerCase()
+            )
+            return {
+              venueId: v?.id?.resy ?? null,
+              name,
+              neighborhood: v?.neighborhood ?? "NYC",
+              cuisine: v?.cuisine?.[0] ?? "",
+              priceRange: curatedMatch?.priceRange ?? PRICE_LABELS[v?.price_range_id ?? 0] ?? "",
+              daysOut: curatedMatch?.daysOut ?? null,
+              releaseTime: curatedMatch?.releaseTime ?? null,
+              releaseNotes: curatedMatch?.releaseNotes ?? "No release time data — set snipe time manually",
+              platform: "resy" as const,
+              source: "resy" as const,
+            }
+          })
       }
     } catch { /* non-fatal */ }
   }
@@ -119,12 +130,16 @@ export async function GET(req: NextRequest) {
     } catch { /* non-fatal */ }
   }
 
-  // For curated OT entries with no venueId, only show them if the live OT search
-  // didn't already return a result for that restaurant (live result has the real venueId)
+  // A curated entry with a null venueId isn't directly pickable — it only exists to
+  // enrich the live result with release info. Suppress it when the matching live
+  // search (Resy or OT) already returned that restaurant with a real venue ID.
+  const liveResyNames = new Set(resyResults.map((r) => r.name.toLowerCase()))
   const liveOTNames = new Set(otResults.map((r) => r.name.toLowerCase()))
-  const filteredCurated = curated.filter(
-    (r) => !(r.platform === "opentable" && r.venueId === null && liveOTNames.has(r.name.toLowerCase()))
-  )
+  const filteredCurated = curated.filter((r) => {
+    if (r.venueId !== null) return true // still has a real ID (e.g. Don Angie OT) — keep
+    const liveNames = (r.platform ?? "resy") === "opentable" ? liveOTNames : liveResyNames
+    return !liveNames.has(r.name.toLowerCase())
+  })
 
   return NextResponse.json({ results: [...filteredCurated, ...resyResults, ...otResults] })
 }

@@ -13,7 +13,7 @@ export type Restaurant = {
 export const NYC_RESTAURANTS: Restaurant[] = [
   {
     name: "Carbone",
-    venueId: 1505,
+    venueId: null,
     neighborhood: "Greenwich Village",
     cuisine: "Italian-American",
     daysOut: 28,
@@ -34,7 +34,7 @@ export const NYC_RESTAURANTS: Restaurant[] = [
   },
   {
     name: "Lilia",
-    venueId: 1274,
+    venueId: null,
     neighborhood: "Williamsburg",
     cuisine: "Italian",
     daysOut: 28,
@@ -44,7 +44,7 @@ export const NYC_RESTAURANTS: Restaurant[] = [
   },
   {
     name: "4 Charles Prime Rib",
-    venueId: 1546,
+    venueId: null,
     neighborhood: "West Village",
     cuisine: "Steakhouse",
     daysOut: 28,
@@ -54,7 +54,7 @@ export const NYC_RESTAURANTS: Restaurant[] = [
   },
   {
     name: "Rezdôra",
-    venueId: 8585,
+    venueId: null,
     neighborhood: "Flatiron",
     cuisine: "Northern Italian",
     daysOut: 28,
@@ -64,7 +64,7 @@ export const NYC_RESTAURANTS: Restaurant[] = [
   },
   {
     name: "Atomix",
-    venueId: 6509,
+    venueId: null,
     neighborhood: "Midtown",
     cuisine: "Modern Korean",
     daysOut: 60,
@@ -74,7 +74,7 @@ export const NYC_RESTAURANTS: Restaurant[] = [
   },
   {
     name: "Jua",
-    venueId: 11322,
+    venueId: null,
     neighborhood: "Flatiron",
     cuisine: "Modern Korean",
     daysOut: 28,
@@ -84,8 +84,8 @@ export const NYC_RESTAURANTS: Restaurant[] = [
   },
   {
     name: "Torrisi",
-    venueId: 68889,
-    neighborhood: "SoHo",
+    venueId: null,
+    neighborhood: "Nolita",
     cuisine: "Italian-American",
     daysOut: 28,
     releaseTime: "00:00",
@@ -94,7 +94,7 @@ export const NYC_RESTAURANTS: Restaurant[] = [
   },
   {
     name: "Frenchette",
-    venueId: 3258,
+    venueId: null,
     neighborhood: "Tribeca",
     cuisine: "French",
     daysOut: 28,
@@ -104,7 +104,7 @@ export const NYC_RESTAURANTS: Restaurant[] = [
   },
   {
     name: "Le Bernardin",
-    venueId: 124,
+    venueId: null,
     neighborhood: "Midtown West",
     cuisine: "French Seafood",
     daysOut: 28,
@@ -114,7 +114,7 @@ export const NYC_RESTAURANTS: Restaurant[] = [
   },
   {
     name: "Laser Wolf",
-    venueId: 56547,
+    venueId: null,
     neighborhood: "Williamsburg",
     cuisine: "Israeli Grill",
     daysOut: 28,
@@ -124,7 +124,7 @@ export const NYC_RESTAURANTS: Restaurant[] = [
   },
   {
     name: "Gage & Tollner",
-    venueId: 43620,
+    venueId: null,
     neighborhood: "Downtown Brooklyn",
     cuisine: "American Steakhouse",
     daysOut: 28,
@@ -134,7 +134,7 @@ export const NYC_RESTAURANTS: Restaurant[] = [
   },
   {
     name: "Gramercy Tavern",
-    venueId: 118,
+    venueId: null,
     neighborhood: "Gramercy",
     cuisine: "American",
     daysOut: 28,
@@ -144,7 +144,7 @@ export const NYC_RESTAURANTS: Restaurant[] = [
   },
   {
     name: "Eleven Madison Park",
-    venueId: 94,
+    venueId: null,
     neighborhood: "Flatiron",
     cuisine: "Modern American (Plant-based)",
     daysOut: 60,
@@ -154,7 +154,7 @@ export const NYC_RESTAURANTS: Restaurant[] = [
   },
   {
     name: "The Grill",
-    venueId: 5234,
+    venueId: null,
     neighborhood: "Midtown East",
     cuisine: "American Continental",
     daysOut: 28,
@@ -164,7 +164,7 @@ export const NYC_RESTAURANTS: Restaurant[] = [
   },
   {
     name: "Nobu",
-    venueId: 126,
+    venueId: null,
     neighborhood: "Tribeca",
     cuisine: "Japanese-Peruvian",
     daysOut: 28,
@@ -174,7 +174,7 @@ export const NYC_RESTAURANTS: Restaurant[] = [
   },
   {
     name: "Balthazar",
-    venueId: 276,
+    venueId: null,
     neighborhood: "SoHo",
     cuisine: "French Brasserie",
     daysOut: 28,
@@ -184,7 +184,7 @@ export const NYC_RESTAURANTS: Restaurant[] = [
   },
   {
     name: "Le Coucou",
-    venueId: 3153,
+    venueId: null,
     neighborhood: "SoHo",
     cuisine: "French",
     daysOut: 28,
@@ -194,7 +194,7 @@ export const NYC_RESTAURANTS: Restaurant[] = [
   },
   {
     name: "Dirty French",
-    venueId: 412,
+    venueId: null,
     neighborhood: "Lower East Side",
     cuisine: "French",
     daysOut: 28,
@@ -204,7 +204,7 @@ export const NYC_RESTAURANTS: Restaurant[] = [
   },
   {
     name: "Crown Shy",
-    venueId: 16018,
+    venueId: null,
     neighborhood: "Financial District",
     cuisine: "Modern American",
     daysOut: 28,
@@ -214,7 +214,7 @@ export const NYC_RESTAURANTS: Restaurant[] = [
   },
   {
     name: "Estela",
-    venueId: 1292,
+    venueId: null,
     neighborhood: "Nolita",
     cuisine: "Mediterranean",
     daysOut: 28,
@@ -224,7 +224,7 @@ export const NYC_RESTAURANTS: Restaurant[] = [
   },
   {
     name: "Cosme",
-    venueId: 2182,
+    venueId: null,
     neighborhood: "Flatiron",
     cuisine: "Mexican",
     daysOut: 28,
@@ -234,7 +234,7 @@ export const NYC_RESTAURANTS: Restaurant[] = [
   },
   {
     name: "L'Artusi",
-    venueId: 432,
+    venueId: null,
     neighborhood: "West Village",
     cuisine: "Italian",
     daysOut: 28,
@@ -244,7 +244,7 @@ export const NYC_RESTAURANTS: Restaurant[] = [
   },
   {
     name: "Daniel",
-    venueId: 217,
+    venueId: null,
     neighborhood: "Upper East Side",
     cuisine: "French",
     daysOut: 28,
@@ -254,7 +254,7 @@ export const NYC_RESTAURANTS: Restaurant[] = [
   },
   {
     name: "Jean-Georges",
-    venueId: 104,
+    venueId: null,
     neighborhood: "Columbus Circle",
     cuisine: "French-American",
     daysOut: 28,
@@ -264,7 +264,7 @@ export const NYC_RESTAURANTS: Restaurant[] = [
   },
   {
     name: "Ci Siamo",
-    venueId: 41823,
+    venueId: null,
     neighborhood: "Hudson Yards",
     cuisine: "Italian",
     daysOut: 28,
@@ -274,7 +274,7 @@ export const NYC_RESTAURANTS: Restaurant[] = [
   },
   {
     name: "Momofuku Ko",
-    venueId: 95,
+    venueId: null,
     neighborhood: "East Village",
     cuisine: "Modern American",
     daysOut: 7,
