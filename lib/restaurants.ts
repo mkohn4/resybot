@@ -23,7 +23,7 @@ export const NYC_RESTAURANTS: Restaurant[] = [
   },
   {
     name: "Don Angie",
-    venueId: null,
+    venueId: 994474,
     neighborhood: "West Village",
     cuisine: "Italian-American",
     daysOut: 7,
