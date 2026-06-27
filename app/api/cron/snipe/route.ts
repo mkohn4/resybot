@@ -157,6 +157,17 @@ export async function processTarget(target: TargetRow) {
     : processResyTarget(target)
 }
 
+// Diagnostic: turn the raw slot list into a compact "HH:MM" summary so a miss
+// records exactly what the API offered (vs. just "no slots"). Capped to keep the
+// SnipeAttempt.error field reasonable.
+function summarizeTimes(times: string[]): string {
+  if (times.length === 0) return "API returned 0 slots"
+  const uniq = [...new Set(times)].sort()
+  const shown = uniq.slice(0, 24)
+  const more = uniq.length > shown.length ? ` +${uniq.length - shown.length} more` : ""
+  return `API offered: ${shown.join(", ")}${more}`
+}
+
 async function processResyTarget(target: TargetRow) {
   const cred = target.user.resyCredential
   if (!cred) {
@@ -208,10 +219,12 @@ async function processResyTarget(target: TargetRow) {
 
   const deadline = isWatch ? Date.now() + 1_000 : Date.now() + 30_000
   let lastError = ""
+  let lastSeen = ""  // diagnostic: times the API returned on the last check
 
   while (Date.now() < deadline) {
     try {
       const slots = await findSlots(target.venueId, dateStr, target.partySize, authToken)
+      lastSeen = summarizeTimes(slots.map((s) => s.date.start.split(" ")[1]?.substring(0, 5) ?? "").filter(Boolean))
       const best = pickBestSlot(slots, target.preferredTimes, dateStr)
 
       if (best) {
@@ -236,11 +249,11 @@ async function processResyTarget(target: TargetRow) {
   }
 
   if (isWatch) {
-    await prisma.snipeAttempt.create({ data: { targetId: target.id, success: false, error: "No slots this check" } })
+    await prisma.snipeAttempt.create({ data: { targetId: target.id, success: false, error: lastSeen || "No slots this check" } })
     return { success: false, watching: true }
   }
 
-  return fallbackOrFail(target, lastError)
+  return fallbackOrFail(target, lastError || lastSeen)
 }
 
 async function processOTTarget(target: TargetRow) {
@@ -277,10 +290,12 @@ async function processOTTarget(target: TargetRow) {
     const bearerToken = decrypt(profile.encryptedBearerToken)
     const guestEmail = target.notificationEmail ?? ""
     const skipSlots = new Set<string>()
+    let lastSeen = ""  // diagnostic: times the API returned on the last check
 
     while (Date.now() < deadline) {
       try {
         const slots = await findOTSlots(target.venueId, dateStr, target.partySize, bearerToken)
+        lastSeen = summarizeTimes(slots.map((s) => s.dateTime.split("T")[1]?.substring(0, 5) ?? "").filter(Boolean))
         const best = pickBestOTSlot(slots, target.preferredTimes, skipSlots)
 
         if (best) {
@@ -324,11 +339,11 @@ async function processOTTarget(target: TargetRow) {
     }
 
     if (isWatch) {
-      await prisma.snipeAttempt.create({ data: { targetId: target.id, success: false, error: "No slots this check" } })
+      await prisma.snipeAttempt.create({ data: { targetId: target.id, success: false, error: lastSeen || "No slots this check" } })
       return { success: false, watching: true }
     }
 
-    return fallbackOrFail(target, lastError)
+    return fallbackOrFail(target, lastError || lastSeen)
   } catch (err: unknown) {
     if (err instanceof OTAuthError) {
       console.error("[cron/ot] auth error — token expired", { targetId: target.id, userId: target.userId })
