@@ -123,6 +123,17 @@ Header: `Authorization: Bearer <CRON_SECRET>`
 
 OT stores `bookedSlot` as `"2026-07-10T20:00"` (ISO with `T`). Resy stores it as `"2026-07-10 20:00:00"` (space-separated). Any time display code must handle both — use `split("T")[1] ?? split(" ")[1]` to extract the time portion, and guard against `NaN` from `parseInt`.
 
+## Multi-user scaling ceiling
+
+The cron is a **single Vercel function invocation** that processes ALL users' targets concurrently via `Promise.allSettled` — work is NOT sharded across machines. Implications as user count grows:
+
+- **Fine at small scale (≤~10 users):** data is fully isolated (every query filters by `userId`, per-user encrypted credentials), each user books with their own token, no booking-logic contention. No impact on success rate.
+- **Degrades at dozens+ users hitting the same hot drops:**
+  - One function instance runs every concurrent SNIPE's pre-warm sleep + 30s/500ms poll loop simultaneously → CPU/memory/event-loop contention can slow or OOM the instance, hurting everyone's snipe timing.
+  - All outbound Resy/OT calls share Vercel's egress IP. Hundreds of availability calls/min from one IP is a bot-farm signature → risk of rate-limiting or IP block affecting ALL users. **This is the most dangerous scaling failure.**
+  - Two users targeting the same restaurant/time compete with each other; no coordination.
+- **Scaling fixes (only if going beyond a handful):** shard the cron across invocations (`/api/cron/snipe?shard=0..N`), and route outbound calls through rotating proxies to avoid the single-IP signature. Not worth doing preemptively.
+
 ## SevenRooms — SKIPPED
 
 Tested 2026-06-25. Steps 1–5 (CSRF, widget info, availability, hold, Stripe setup intent) all work with plain fetch. The book endpoint returns `{"errors":["ReCaptcha server-side validation failed."]}` regardless — server-side reCAPTCHA v3 is required and cannot be bypassed without a real browser or a paid captcha-solving service. Most SR restaurants are also on Resy or OpenTable, so not worth the added complexity. No plans to implement.
