@@ -22,6 +22,10 @@ A self-hosted bot that automatically snipes hard-to-get NYC restaurant reservati
 - **Encrypted credential storage** — Resy email/password, OT Bearer token, and OT wallet card token all stored with AES-256-GCM
 - **CC-hold restaurants** — OpenTable restaurants requiring a credit card hold are supported; your saved card is stored during OT onboarding
 - **Curated NYC restaurant list** — top NYC restaurants pre-loaded with known release times; includes both Resy and OT entries (e.g. Don Angie is OT-only, 7 days out at 9am)
+- **Community release notes** — any user can add or correct a restaurant's release info (note + drop time + days out) from the Add Target modal; shared across all users and overrides the static curated data, so the list improves as drop times change
+- **Live availability preview** — in Book Now and Watch modes, the modal checks the venue's current openings and highlights which of your preferred times are bookable right now, plus surfaces any other open times
+- **Clickable venue links** — restaurant names on the dashboard link straight to the OpenTable profile (or a prefilled Resy search) for the reservation date and party size
+- **Inline target editing** — edit an active target's party size and preferred times right on the card to add or remove slots without recreating it
 - **Auto-suggested snipe times** — the UI calculates the right moment based on each restaurant's drop schedule
 - **Timezone-aware snipe input** — select ET/CT/MT/PT when scheduling; time is always displayed in ET on the dashboard
 - **Strict slot selection** — only books your specified preferred times, in order; no fallback to unselected times. Patio/outdoor seating always skipped

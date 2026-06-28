@@ -72,6 +72,18 @@ Shared, user-editable layer on top of the static curated list in `lib/restaurant
 - `/api/venues/lookup` batch-fetches notes for all results and overlays them (non-fatal try/catch — falls back to static data).
 - `releaseTime` validated as `HH:MM` 24h ET; `daysOut` validated 0–365; note text max 1000 chars. Last editor's name/id stored for attribution.
 
+## Live availability preview
+
+In **Book Now and Watch** modes, the Add Target modal auto-fetches current openings once a venue + date are set (400ms debounced; re-runs on date/party/platform/venue change — NOT in Scheduled mode, where the table isn't released yet). `GET /api/venues/availability` reuses the snipe handler's `findSlots`/`findOTSlots` (Resy patio/outdoor skipped, same as `pickBestSlot`) and returns unique `HH:MM` times — no booking happens. Preferred-time chips that are open get an emerald ring + ● dot; open times outside the standard chip set appear in an "Other times open now" row (tap to add). Not auto-polled — user clicks "refresh". Each check is a real outbound call from Vercel's shared IP (see scaling ceiling).
+
+## Clickable venue links
+
+Restaurant names on dashboard cards (`TargetCard`) link to the platform venue page, opening in a new tab. **OpenTable** → direct by-id profile `opentable.com/restaurant/profile/{venueId}` (prefilled date + party). **Resy** has no public by-id URL and we don't store the slug, so it deep-links to NYC search prefilled with name/date/seats — lands on/near the venue. (Follow-up if needed: store Resy `url_slug` at creation time for a direct link.)
+
+## Inline target editing
+
+Active targets (PENDING/SNIPING/WATCHING) have an **Edit** button on the card opening an inline editor for `partySize` + `preferredTimes`. Saves via `PATCH /api/targets/[id]` (route already accepted these fields). Click-order is preserved and newly-toggled times append — consistent with the no-auto-sort rule. `snipeAt` is also PATCH-able server-side but not yet exposed in the UI.
+
 ## Preferred time priority
 
 Default order (8–8:30pm first, then 7:30–9pm):
@@ -108,11 +120,13 @@ Platform:     RESY | OPENTABLE
 | `lib/auth.ts` | NextAuth v5 config |
 | `app/api/cron/snipe/route.ts` | Cron handler — processes SNIPE + WATCH targets for both platforms, auto-fallback |
 | `app/api/targets/[id]/snipe/route.ts` | On-demand immediate snipe with auto-fallback (Resy + OT) |
+| `app/api/targets/[id]/route.ts` | DELETE target; PATCH to edit `partySize`/`preferredTimes`/`snipeAt` or cancel (status=CANCELLED) |
 | `app/api/venues/lookup/route.ts` | Venue search — curated list + Resy live search + OT mobile autocomplete; overlays community release notes |
 | `app/api/venues/release-note/route.ts` | GET/POST shared community release notes (keyed by normalized name + platform) |
+| `app/api/venues/availability/route.ts` | GET live bookable times for a venue/date/party (reuses findSlots/findOTSlots, no booking); powers Book Now/Watch availability preview |
 | `app/api/ot-profile/route.ts` | GET/POST OT profile — stores encrypted bearer + wallet card token; returns `cardLast4` |
-| `components/AddTargetModal.tsx` | Add target UI — Scheduled / Book Now / Watch modes; timezone selector (ET/CT/MT/PT); ✕ close button |
-| `components/TargetCard.tsx` | Dashboard card — snipe time always displayed in ET |
+| `components/AddTargetModal.tsx` | Add target UI — Scheduled / Book Now / Watch modes; timezone selector (ET/CT/MT/PT); editable community release note; live availability highlighting; ✕ close button |
+| `components/TargetCard.tsx` | Dashboard card — snipe time always displayed in ET; venue name links to platform page; inline Edit (party size + preferred times) for active targets |
 | `components/OTProfileModal.tsx` | OT onboarding — paste bearer token; ✕ close button |
 | `components/CredentialsModal.tsx` | Resy credentials modal — ✕ close button |
 | `components/DashboardClient.tsx` | Dashboard shell — avatar dropdown menu (Resy, OT, Lookup, Sign out); dark mode default |
