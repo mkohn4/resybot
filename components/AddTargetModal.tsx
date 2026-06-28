@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import type { Restaurant } from "@/lib/restaurants"
 import { suggestSnipeTime } from "@/lib/restaurants"
 
@@ -56,6 +56,11 @@ export function AddTargetModal({
   const [noteDaysOut, setNoteDaysOut] = useState("")
   const [savingNote, setSavingNote] = useState(false)
   const [noteError, setNoteError] = useState("")
+
+  // Live availability (Book Now / Watch modes) — which times are bookable right now
+  const [availTimes, setAvailTimes] = useState<string[] | null>(null)
+  const [availLoading, setAvailLoading] = useState(false)
+  const [availError, setAvailError] = useState("")
 
   useEffect(() => {
     if (suppressSearch.current) { suppressSearch.current = false; return }
@@ -158,6 +163,38 @@ export function AddTargetModal({
       setSavingNote(false)
     }
   }
+
+  const fetchAvailability = useCallback(async () => {
+    const venueId = useCustom ? customVenueId : selected?.venueId
+    if (!venueId || !date) return
+    setAvailLoading(true)
+    setAvailError("")
+    try {
+      const plat = platform === "opentable" ? "opentable" : "resy"
+      const res = await fetch(`/api/venues/availability?venueId=${venueId}&platform=${plat}&date=${date}&partySize=${partySize}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? "Could not fetch availability")
+      setAvailTimes(data.times ?? [])
+    } catch (err: unknown) {
+      setAvailTimes(null)
+      setAvailError(err instanceof Error ? err.message : "Could not fetch availability")
+    } finally {
+      setAvailLoading(false)
+    }
+  }, [useCustom, customVenueId, selected, date, platform, partySize])
+
+  // Auto-fetch live availability for Book Now / Watch when the venue, date and
+  // party size are all set. Re-runs (debounced) whenever those inputs change.
+  useEffect(() => {
+    const venueId = useCustom ? customVenueId : selected?.venueId
+    const shouldFetch = mode !== "scheduled" && !!venueId && !!date
+    const timer = setTimeout(() => {
+      setAvailTimes(null)
+      setAvailError("")
+      if (shouldFetch) fetchAvailability()
+    }, shouldFetch ? 400 : 0)
+    return () => clearTimeout(timer)
+  }, [mode, date, partySize, selected, customVenueId, useCustom, platform, fetchAvailability])
 
   function selectRestaurant(r: Restaurant) {
     suppressSearch.current = true
@@ -557,7 +594,24 @@ export function AddTargetModal({
 
         {/* Preferred times */}
         <div className="mb-4">
-          <label className="text-sm text-gray-400 mb-1.5 block">Preferred Times</label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-sm text-gray-400 block">Preferred Times</label>
+            {mode !== "scheduled" && (
+              <span className="text-xs">
+                {availLoading ? (
+                  <span className="text-gray-500">Checking availability…</span>
+                ) : availError ? (
+                  <button onClick={fetchAvailability} className="text-amber-400/70 hover:text-amber-300 transition-colors">
+                    {availError} · retry
+                  </button>
+                ) : availTimes ? (
+                  <button onClick={fetchAvailability} className="text-emerald-400/80 hover:text-emerald-300 transition-colors">
+                    {availTimes.length > 0 ? `${availTimes.length} open now` : "None open now"} · refresh
+                  </button>
+                ) : null}
+              </span>
+            )}
+          </div>
           {[{ label: "Lunch", times: LUNCH_TIMES }, { label: "Dinner", times: DINNER_TIMES }].map(({ label, times }) => (
             <div key={label} className="mb-2">
               <p className="text-xs text-gray-600 uppercase tracking-wider mb-1.5">{label}</p>
@@ -565,21 +619,52 @@ export function AddTargetModal({
                 {times.map((t) => {
                   const [h, m] = t.split(":").map(Number)
                   const label12 = `${h > 12 ? h - 12 : h === 0 ? 12 : h}:${m.toString().padStart(2, "0")}${h >= 12 ? "pm" : "am"}`
+                  const isSelected = preferredTimes.includes(t)
+                  const isAvailable = availTimes?.includes(t) ?? false
                   return (
                     <button
                       key={t}
                       onClick={() => toggleTime(t)}
+                      title={availTimes ? (isAvailable ? "Available now" : "Not available right now") : undefined}
                       className={`px-3 py-2.5 rounded-lg text-xs font-medium transition-colors ${
-                        preferredTimes.includes(t) ? "bg-emerald-600 text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
-                      }`}
+                        isSelected ? "bg-emerald-600 text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                      } ${isAvailable ? "ring-2 ring-emerald-400 ring-offset-1 ring-offset-gray-900" : ""}`}
                     >
                       {label12}
+                      {isAvailable && <span className="ml-1 text-emerald-300">●</span>}
                     </button>
                   )
                 })}
               </div>
             </div>
           ))}
+
+          {/* Open times outside the standard chip set */}
+          {mode !== "scheduled" && availTimes && availTimes.filter((t) => !PREFERRED_TIMES.includes(t)).length > 0 && (
+            <div className="mt-2">
+              <p className="text-xs text-gray-600 uppercase tracking-wider mb-1.5">Other times open now</p>
+              <div className="flex flex-wrap gap-2">
+                {availTimes.filter((t) => !PREFERRED_TIMES.includes(t)).map((t) => {
+                  const [h, m] = t.split(":").map(Number)
+                  const label12 = `${h > 12 ? h - 12 : h === 0 ? 12 : h}:${m.toString().padStart(2, "0")}${h >= 12 ? "pm" : "am"}`
+                  const isSelected = preferredTimes.includes(t)
+                  return (
+                    <button
+                      key={t}
+                      onClick={() => toggleTime(t)}
+                      title="Available now"
+                      className={`px-3 py-2.5 rounded-lg text-xs font-medium transition-colors ring-2 ring-emerald-400 ring-offset-1 ring-offset-gray-900 ${
+                        isSelected ? "bg-emerald-600 text-white" : "bg-gray-800 text-emerald-300 hover:bg-gray-700"
+                      }`}
+                    >
+                      {label12}<span className="ml-1 text-emerald-300">●</span>
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="text-gray-500 text-xs mt-1.5">Tap to add to your preferred times.</p>
+            </div>
+          )}
         </div>
 
         {/* Snipe time — only for scheduled mode */}
