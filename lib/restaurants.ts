@@ -288,6 +288,12 @@ export function getRestaurantByVenueId(venueId: number): Restaurant | undefined 
   return NYC_RESTAURANTS.find((r) => r.venueId === venueId)
 }
 
+// Normalized key for matching a restaurant to its community release note.
+// Lowercased + whitespace-collapsed so minor casing/spacing differences still match.
+export function venueNameKey(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, " ")
+}
+
 // How far ET is ahead of UTC at a given instant, in ms (negative — ET is behind UTC).
 // Computed from Intl so it's correct for both EDT and EST, independent of the
 // runtime's own local timezone (Vercel runs in UTC).

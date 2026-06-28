@@ -131,6 +131,27 @@ enum TargetStatus {
   CANCELLED
 }
 
+// Community-curated reservation-release info, layered on top of the static
+// curated list in lib/restaurants.ts. Keyed by normalized name + platform so it
+// survives Resy venueId churn (curated venueIds are intentionally null). When a
+// note exists, it overrides the static releaseNotes/releaseTime/daysOut for display
+// and snipe-time auto-suggestion.
+model VenueReleaseNote {
+  id            String   @id @default(cuid())
+  nameKey       String   // normalized restaurant name (lowercased, trimmed)
+  platform      Platform
+  displayName   String   // original-cased name as last saved
+  releaseTime   String?  // HH:MM ET 24h — drives auto-suggested Snipe At
+  daysOut       Int?     // how many days in advance reservations open
+  notes         String   // free-text human-readable release note
+  updatedById   String?  // userId of last editor (audit/attribution)
+  updatedByName String?  // display name of last editor
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([nameKey, platform])
+}
+
 model SnipeAttempt {
   id        String            @id @default(cuid())
   targetId  String

@@ -64,6 +64,14 @@ Auth: Bearer token extracted from iOS app via Proxyman HAR capture (no client_id
 
 **Bearer token expiry:** Unknown — likely long-lived (weeks/months). If booking starts failing with 401, user must re-paste a fresh token from Proxyman.
 
+## Community release notes
+
+Shared, user-editable layer on top of the static curated list in `lib/restaurants.ts`. Stored in the `VenueReleaseNote` table, keyed by **normalized name + platform** (`venueNameKey()` — lowercased, whitespace-collapsed) so notes survive Resy venueId churn. Any signed-in user can add/edit a note from the **Add Target modal** (the blue "Release info" box → "Add note"/"Edit").
+
+- **Community overrides curated:** when a note exists, it replaces the displayed `releaseNotes`. If the note also sets `releaseTime`/`daysOut`, those override the static values and feed `suggestSnipeTime()` so the auto-suggested Snipe At recomputes from the corrected drop time. Static `restaurants.ts` is untouched — it still seeds the editor defaults and powers restaurants with no community note.
+- `/api/venues/lookup` batch-fetches notes for all results and overlays them (non-fatal try/catch — falls back to static data).
+- `releaseTime` validated as `HH:MM` 24h ET; `daysOut` validated 0–365; note text max 1000 chars. Last editor's name/id stored for attribution.
+
 ## Preferred time priority
 
 Default order (8–8:30pm first, then 7:30–9pm):
@@ -100,7 +108,8 @@ Platform:     RESY | OPENTABLE
 | `lib/auth.ts` | NextAuth v5 config |
 | `app/api/cron/snipe/route.ts` | Cron handler — processes SNIPE + WATCH targets for both platforms, auto-fallback |
 | `app/api/targets/[id]/snipe/route.ts` | On-demand immediate snipe with auto-fallback (Resy + OT) |
-| `app/api/venues/lookup/route.ts` | Venue search — curated list + Resy live search + OT mobile autocomplete |
+| `app/api/venues/lookup/route.ts` | Venue search — curated list + Resy live search + OT mobile autocomplete; overlays community release notes |
+| `app/api/venues/release-note/route.ts` | GET/POST shared community release notes (keyed by normalized name + platform) |
 | `app/api/ot-profile/route.ts` | GET/POST OT profile — stores encrypted bearer + wallet card token; returns `cardLast4` |
 | `components/AddTargetModal.tsx` | Add target UI — Scheduled / Book Now / Watch modes; timezone selector (ET/CT/MT/PT); ✕ close button |
 | `components/TargetCard.tsx` | Dashboard card — snipe time always displayed in ET |
@@ -110,7 +119,7 @@ Platform:     RESY | OPENTABLE
 | `components/VenueLookup.tsx` | Venue lookup tool with curated sidebar |
 | `proxy.ts` | Next.js 16 auth proxy (formerly middleware.ts) |
 | `prisma.config.ts` | Loads `.env.local` for Prisma CLI commands |
-| `prisma/schema.prisma` | DB schema — User, ResyCredential, OTGuestProfile, ReservationTarget, SnipeAttempt |
+| `prisma/schema.prisma` | DB schema — User, ResyCredential, OTGuestProfile, ReservationTarget, SnipeAttempt, VenueReleaseNote |
 
 ## Cron setup (cron-job.org)
 

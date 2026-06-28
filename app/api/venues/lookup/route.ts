@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { NYC_RESTAURANTS } from "@/lib/restaurants"
+import { NYC_RESTAURANTS, venueNameKey } from "@/lib/restaurants"
 import { searchOTVenues } from "@/lib/opentable"
 import { RESY_API_KEY } from "@/lib/resy"
 import { auth } from "@/lib/auth"
@@ -141,5 +141,35 @@ export async function GET(req: NextRequest) {
     return !liveNames.has(r.name.toLowerCase())
   })
 
-  return NextResponse.json({ results: [...filteredCurated, ...resyResults, ...otResults] })
+  const results = [...filteredCurated, ...resyResults, ...otResults]
+
+  // Layer community-curated release notes over the static curated data. A note,
+  // when present, overrides the displayed releaseNotes and (if set) releaseTime/daysOut.
+  // Keyed by normalized name + platform — matches across curated/live result sources.
+  try {
+    const keys = results.map((r) => ({
+      nameKey: venueNameKey(r.name),
+      platform: ((r.platform ?? "resy") === "opentable" ? "OPENTABLE" : "RESY") as "RESY" | "OPENTABLE",
+    }))
+    if (keys.length > 0) {
+      const notes = await prisma.venueReleaseNote.findMany({
+        where: { OR: keys.map((k) => ({ nameKey: k.nameKey, platform: k.platform })) },
+      })
+      const noteMap = new Map(notes.map((n) => [`${n.nameKey}|${n.platform}`, n]))
+      for (const r of results) {
+        const plat = (r.platform ?? "resy") === "opentable" ? "OPENTABLE" : "RESY"
+        const n = noteMap.get(`${venueNameKey(r.name)}|${plat}`)
+        if (n) {
+          r.releaseNotes = n.notes
+          if (n.releaseTime != null) r.releaseTime = n.releaseTime
+          if (n.daysOut != null) r.daysOut = n.daysOut
+          ;(r as Record<string, unknown>).communityNote = true
+          ;(r as Record<string, unknown>).noteUpdatedBy = n.updatedByName ?? null
+          ;(r as Record<string, unknown>).noteUpdatedAt = n.updatedAt
+        }
+      }
+    }
+  } catch { /* non-fatal — fall back to static curated data */ }
+
+  return NextResponse.json({ results })
 }

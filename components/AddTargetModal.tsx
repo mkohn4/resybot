@@ -45,6 +45,18 @@ export function AddTargetModal({
   const searchRef = useRef<HTMLDivElement>(null)
   const suppressSearch = useRef(false)
 
+  // Community release note for the selected restaurant
+  const [communityNote, setCommunityNote] = useState<{
+    notes: string; releaseTime: string | null; daysOut: number | null
+    updatedByName: string | null; updatedAt: string | null
+  } | null>(null)
+  const [editingNote, setEditingNote] = useState(false)
+  const [noteDraft, setNoteDraft] = useState("")
+  const [noteReleaseTime, setNoteReleaseTime] = useState("")
+  const [noteDaysOut, setNoteDaysOut] = useState("")
+  const [savingNote, setSavingNote] = useState(false)
+  const [noteError, setNoteError] = useState("")
+
   useEffect(() => {
     if (suppressSearch.current) { suppressSearch.current = false; return }
     if (query.length < 2 || useCustom) {
@@ -75,6 +87,77 @@ export function AddTargetModal({
       setSnipeAt(localISO)
     }
   }, [date, selected])
+
+  // Load the community release note whenever a restaurant is selected
+  useEffect(() => {
+    let cancelled = false
+    const name = selected?.name
+    const plat = platform === "opentable" ? "OPENTABLE" : "RESY"
+    Promise.resolve().then(() => {
+      if (cancelled) return
+      if (!name) { setCommunityNote(null); setEditingNote(false); return }
+      fetch(`/api/venues/release-note?name=${encodeURIComponent(name)}&platform=${plat}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (cancelled) return
+          const n = data.note
+          setCommunityNote(n
+            ? { notes: n.notes, releaseTime: n.releaseTime, daysOut: n.daysOut, updatedByName: n.updatedByName, updatedAt: n.updatedAt }
+            : null)
+          setEditingNote(false)
+        })
+        .catch(() => { if (!cancelled) setCommunityNote(null) })
+    })
+    return () => { cancelled = true }
+  }, [selected, platform])
+
+  function openNoteEditor() {
+    // Seed the editor from the community note if present, else the static curated data
+    setNoteDraft(communityNote?.notes ?? selected?.releaseNotes ?? "")
+    setNoteReleaseTime(communityNote?.releaseTime ?? selected?.releaseTime ?? "")
+    setNoteDaysOut(
+      communityNote?.daysOut != null ? String(communityNote.daysOut)
+      : selected?.daysOut != null ? String(selected.daysOut) : ""
+    )
+    setNoteError("")
+    setEditingNote(true)
+  }
+
+  async function saveNote() {
+    if (!selected?.name) return
+    setSavingNote(true)
+    setNoteError("")
+    try {
+      const res = await fetch("/api/venues/release-note", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: selected.name,
+          platform: platform === "opentable" ? "OPENTABLE" : "RESY",
+          notes: noteDraft,
+          releaseTime: noteReleaseTime || undefined,
+          daysOut: noteDaysOut || undefined,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? "Failed to save note")
+      const n = data.note
+      setCommunityNote({ notes: n.notes, releaseTime: n.releaseTime, daysOut: n.daysOut, updatedByName: n.updatedByName, updatedAt: n.updatedAt })
+      // Apply the community release time to the selected restaurant so the
+      // auto-suggested Snipe At recomputes from the corrected drop time.
+      if (selected) {
+        const updated = { ...selected, releaseNotes: n.notes,
+          releaseTime: n.releaseTime ?? selected.releaseTime,
+          daysOut: n.daysOut ?? selected.daysOut }
+        setSelected(updated)
+      }
+      setEditingNote(false)
+    } catch (err: unknown) {
+      setNoteError(err instanceof Error ? err.message : "Something went wrong")
+    } finally {
+      setSavingNote(false)
+    }
+  }
 
   function selectRestaurant(r: Restaurant) {
     suppressSearch.current = true
@@ -357,10 +440,88 @@ export function AddTargetModal({
           </button>
         </div>
 
-        {selected?.releaseTime && (
+        {selected && (
           <div className="mb-4 bg-blue-500/10 border border-blue-500/20 rounded-xl p-3">
-            <p className="text-blue-300 text-xs font-medium mb-0.5">Release info for {selected.name}</p>
-            <p className="text-blue-200/70 text-xs">{selected.releaseNotes}</p>
+            {!editingNote ? (
+              <>
+                <div className="flex items-center justify-between gap-2 mb-0.5">
+                  <p className="text-blue-300 text-xs font-medium">
+                    Release info for {selected.name}
+                    {communityNote && (
+                      <span className="ml-1.5 text-emerald-400/80 font-normal">· community-updated</span>
+                    )}
+                  </p>
+                  <button
+                    onClick={openNoteEditor}
+                    className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors shrink-0"
+                  >
+                    {communityNote ? "Edit" : "Add note"}
+                  </button>
+                </div>
+                <p className="text-blue-200/70 text-xs">
+                  {communityNote?.notes ?? selected.releaseNotes ?? "No release time data yet — add one to help others."}
+                </p>
+                {communityNote?.updatedByName && (
+                  <p className="text-blue-300/40 text-[10px] mt-1">
+                    Last updated by {communityNote.updatedByName}
+                  </p>
+                )}
+              </>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-blue-300 text-xs font-medium">Edit release info for {selected.name}</p>
+                <textarea
+                  value={noteDraft}
+                  onChange={(e) => setNoteDraft(e.target.value)}
+                  rows={3}
+                  maxLength={1000}
+                  placeholder="e.g. Drops at midnight ET exactly 28 days out. Gone in seconds."
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500 text-xs resize-none"
+                />
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className="text-[10px] text-blue-300/60 uppercase tracking-wider block mb-0.5">Release time (ET)</label>
+                    <input
+                      type="time"
+                      value={noteReleaseTime}
+                      onChange={(e) => setNoteReleaseTime(e.target.value)}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-white focus:outline-none focus:border-emerald-500 text-xs"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-[10px] text-blue-300/60 uppercase tracking-wider block mb-0.5">Days out</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={365}
+                      value={noteDaysOut}
+                      onChange={(e) => setNoteDaysOut(e.target.value)}
+                      placeholder="28"
+                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500 text-xs"
+                    />
+                  </div>
+                </div>
+                <p className="text-blue-300/40 text-[10px]">
+                  Release time + days out auto-fill the Snipe At time. Shared with all users.
+                </p>
+                {noteError && <p className="text-red-400 text-xs">{noteError}</p>}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setEditingNote(false)}
+                    className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-medium py-1.5 rounded-lg transition-colors text-xs"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={saveNote}
+                    disabled={savingNote || !noteDraft.trim()}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-medium py-1.5 rounded-lg transition-colors text-xs"
+                  >
+                    {savingNote ? "Saving…" : "Save note"}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
