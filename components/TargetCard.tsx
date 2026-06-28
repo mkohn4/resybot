@@ -2,6 +2,15 @@
 
 import { useState } from "react"
 
+const LUNCH_TIMES  = ["11:30", "11:45", "12:00", "12:15", "12:30", "12:45", "13:00", "13:15", "13:30"]
+const DINNER_TIMES = ["17:30", "17:45", "18:00", "18:15", "18:30", "18:45", "19:00", "19:15", "19:30", "19:45", "20:00", "20:15", "20:30", "20:45", "21:00", "21:15", "21:30", "21:45", "22:00", "22:15", "22:30"]
+
+function label12(t: string): string {
+  const [h, m] = t.split(":").map(Number)
+  if (isNaN(h) || isNaN(m)) return t
+  return `${h === 0 ? 12 : h > 12 ? h - 12 : h}:${m.toString().padStart(2, "0")}${h >= 12 ? "pm" : "am"}`
+}
+
 type Attempt = {
   id: string
   attemptAt: Date
@@ -60,6 +69,51 @@ export function TargetCard({
   const [sniping, setSniping] = useState(false)
   const [stopping, setStopping] = useState(false)
   const [snipeResult, setSnipeResult] = useState<{ success: boolean; message?: string; slot?: string; fallbackToWatch?: boolean } | null>(null)
+
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [editError, setEditError] = useState("")
+  const [editTimes, setEditTimes] = useState<string[]>(target.preferredTimes)
+  const [editPartySize, setEditPartySize] = useState(target.partySize)
+
+  function startEdit() {
+    setEditTimes(target.preferredTimes)
+    setEditPartySize(target.partySize)
+    setEditError("")
+    setEditing(true)
+    setExpanded(false)
+  }
+
+  function toggleEditTime(t: string) {
+    setEditTimes((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]))
+  }
+
+  async function handleSaveEdit() {
+    if (editTimes.length === 0) {
+      setEditError("Select at least one preferred time")
+      return
+    }
+    setSaving(true)
+    setEditError("")
+    try {
+      const res = await fetch(`/api/targets/${target.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preferredTimes: editTimes, partySize: editPartySize }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setEditError(data.error ?? "Could not save changes")
+        return
+      }
+      setEditing(false)
+      onRefresh()
+    } catch {
+      setEditError("Could not save changes — try again")
+    } finally {
+      setSaving(false)
+    }
+  }
 
   // Deep-link to the venue page on the booking platform.
   // OpenTable has a clean by-id profile URL; Resy pages are slug-based (no public
@@ -191,6 +245,14 @@ export function TargetCard({
           >
             {expanded ? "Less" : "Details"}
           </button>
+          {["PENDING", "SNIPING", "WATCHING"].includes(target.status) && (
+            <button
+              onClick={() => (editing ? setEditing(false) : startEdit())}
+              className="text-xs bg-gray-700/40 hover:bg-gray-700 text-gray-300 px-2.5 py-1 rounded-lg transition-colors"
+            >
+              {editing ? "Close" : "Edit"}
+            </button>
+          )}
           {target.status === "WATCHING" && (
             <button
               onClick={handleStopWatching}
@@ -233,6 +295,70 @@ export function TargetCard({
             ? "No slots now — switched to Watch mode for cancellations"
             : `No slots available: ${snipeResult.message}`
           }
+        </div>
+      )}
+
+      {editing && (
+        <div className="border-t border-gray-800 px-4 py-3 space-y-4">
+          {/* Party size */}
+          <div>
+            <p className="text-gray-500 text-xs uppercase tracking-wider mb-1.5">Party Size</p>
+            <div className="flex gap-2">
+              {[1, 2, 3, 4, 5, 6].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setEditPartySize(n)}
+                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    editPartySize === n ? "bg-emerald-600 text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Preferred times */}
+          <div>
+            <p className="text-gray-500 text-xs uppercase tracking-wider mb-1.5">Preferred Times</p>
+            {[{ label: "Lunch", times: LUNCH_TIMES }, { label: "Dinner", times: DINNER_TIMES }].map(({ label, times }) => (
+              <div key={label} className="mb-2">
+                <p className="text-xs text-gray-600 uppercase tracking-wider mb-1.5">{label}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {times.map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => toggleEditTime(t)}
+                      className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        editTimes.includes(t) ? "bg-emerald-600 text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                      }`}
+                    >
+                      {label12(t)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+            <p className="text-gray-500 text-xs mt-1">Times are tried in the order shown when you first added them. Newly added times are appended.</p>
+          </div>
+
+          {editError && <p className="text-red-400 text-xs">{editError}</p>}
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => setEditing(false)}
+              className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-medium py-2 rounded-lg transition-colors text-xs"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveEdit}
+              disabled={saving || editTimes.length === 0}
+              className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-medium py-2 rounded-lg transition-colors text-xs"
+            >
+              {saving ? "Saving…" : "Save changes"}
+            </button>
+          </div>
         </div>
       )}
 
