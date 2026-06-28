@@ -61,6 +61,24 @@ export function TargetCard({
   const [stopping, setStopping] = useState(false)
   const [snipeResult, setSnipeResult] = useState<{ success: boolean; message?: string; slot?: string; fallbackToWatch?: boolean } | null>(null)
 
+  // Deep-link to the venue page on the booking platform.
+  // OpenTable has a clean by-id profile URL; Resy pages are slug-based (no public
+  // by-id URL), so we deep-link to Resy search prefilled with name/date/party.
+  const venueUrl = (() => {
+    const dateStr = new Date(target.date).toISOString().split("T")[0]
+    if (target.platform === "OPENTABLE") {
+      const u = new URL(`https://www.opentable.com/restaurant/profile/${target.venueId}`)
+      u.searchParams.set("dateTime", `${dateStr}T19:00`)
+      u.searchParams.set("covers", String(target.partySize))
+      return u.toString()
+    }
+    const u = new URL("https://resy.com/cities/new-york-ny")
+    u.searchParams.set("date", dateStr)
+    u.searchParams.set("seats", String(target.partySize))
+    u.searchParams.set("query", target.venueName)
+    return u.toString()
+  })()
+
   const reservationDate = new Date(target.date).toLocaleDateString("en-US", {
     weekday: "short",
     month: "short",
@@ -135,7 +153,15 @@ export function TargetCard({
       <div className="p-4 flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <h3 className="text-white font-semibold text-sm">{target.venueName}</h3>
+            <a
+              href={venueUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-white font-semibold text-sm hover:text-emerald-400 transition-colors hover:underline decoration-emerald-400/40 underline-offset-2"
+              title={`Open ${target.venueName} on ${target.platform === "OPENTABLE" ? "OpenTable" : "Resy"}`}
+            >
+              {target.venueName}
+            </a>
             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_STYLES[target.status] ?? "bg-gray-700 text-gray-400"}`}>
               {STATUS_LABELS[target.status] ?? target.status}
             </span>
