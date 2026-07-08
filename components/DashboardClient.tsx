@@ -32,15 +32,17 @@ type Props = {
   initialTargets: Target[]
   hasCredentials: boolean
   hasOTProfile: boolean
+  otTokenExpired: boolean
 }
 
-export function DashboardClient({ user, initialTargets, hasCredentials, hasOTProfile }: Props) {
+export function DashboardClient({ user, initialTargets, hasCredentials, hasOTProfile, otTokenExpired }: Props) {
   const [targets, setTargets] = useState<Target[]>(initialTargets)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showCredModal, setShowCredModal] = useState(!hasCredentials)
   const [showOTModal, setShowOTModal] = useState(false)
   const [credsSaved, setCredsSaved] = useState(hasCredentials)
   const [otProfileSaved, setOTProfileSaved] = useState(hasOTProfile)
+  const [otExpired, setOTExpired] = useState(otTokenExpired)
 
   async function refreshTargets() {
     try {
@@ -154,6 +156,22 @@ export function DashboardClient({ user, initialTargets, hasCredentials, hasOTPro
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-8">
+        {/* OpenTable token expired — snipes/watches paused until reconnected */}
+        {otExpired && (
+          <div className="mb-6 bg-red-500/10 border border-red-500/40 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-red-400 font-medium text-sm">OpenTable disconnected — your token expired</p>
+              <p className="text-red-400/70 text-xs mt-0.5">OpenTable snipes and watches are paused. Capture a fresh bearer token and paste it to resume.</p>
+            </div>
+            <button
+              onClick={() => setShowOTModal(true)}
+              className="bg-red-500 text-white font-semibold text-sm px-4 py-2 rounded-lg hover:bg-red-400 transition-colors"
+            >
+              Reconnect OpenTable
+            </button>
+          </div>
+        )}
+
         {/* Credential warning */}
         {!credsSaved && !otProfileSaved && (
           <div className="mb-6 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
@@ -285,6 +303,7 @@ export function DashboardClient({ user, initialTargets, hasCredentials, hasOTPro
           onClose={() => setShowOTModal(false)}
           onSaved={() => {
             setOTProfileSaved(true)
+            setOTExpired(false)
             setShowOTModal(false)
           }}
         />

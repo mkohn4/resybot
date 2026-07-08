@@ -23,6 +23,7 @@ export default async function DashboardPage() {
       initialTargets={targets}
       hasCredentials={!!credential}
       hasOTProfile={!!otProfile}
+      otTokenExpired={!!otProfile?.bearerExpiredAt}
     />
   )
 }

@@ -62,7 +62,9 @@ Auth: Bearer token extracted from iOS app via Proxyman HAR capture (no client_id
 
 **OT onboarding flow:** User pastes bearer token into OTProfileModal → app calls `POST /api/ot-profile` → fetches `GET /api/v3/user/?loadInvitations=1` → stores encrypted bearer + gpid + customerId + phone + default wallet card (Spreedly token + last4) in `OTGuestProfile`
 
-**Bearer token expiry:** Unknown — likely long-lived (weeks/months). If booking starts failing with 401, user must re-paste a fresh token from Proxyman.
+**Bearer token expiry:** Unknown — likely long-lived (weeks/months). The token is a static credential minted at OT-app login; there is NO refresh/login endpoint to automate against (OT login is behind Akamai bot detection — `bm_sv` cookie + `X-OT-SessionId`), so a fresh capture is always manual. When it dies, re-capture from Proxyman and either paste into the OT modal or run `node scripts/update-ot-token.mjs <bearerToken> [email]` (mirrors the `ot-profile` POST — validates, fetches profile, encrypts, clears the expiry flag).
+
+**Token-expiry detection + alert:** On any OT `401` (`OTAuthError`), `flagOTTokenExpired(userId, email)` in `lib/otAuth.ts` sets `OTGuestProfile.bearerExpiredAt` and emails the user (`sendOTTokenExpired`) — but only ONCE per expiry, via a conditional `updateMany(where: { bearerExpiredAt: null })` so concurrent OT targets in one cron tick don't spam. Expired OT targets are NOT marked FAILED — they stay alive and resume once the user reconnects (expiry isn't the target's fault). The dashboard shows a red "OpenTable disconnected — reconnect" banner (`otTokenExpired` prop). The flag is cleared whenever a fresh token is stored (`ot-profile` POST sets `bearerExpiredAt: null`).
 
 ## Community release notes
 
@@ -116,7 +118,8 @@ Platform:     RESY | OPENTABLE
 | `lib/db.ts` | Prisma client with PrismaNeon WebSocket adapter |
 | `lib/crypto.ts` | AES-256-GCM encrypt/decrypt |
 | `lib/restaurants.ts` | 27 curated NYC restaurants + `suggestSnipeTime()`. Includes `platform` field — Don Angie is OT-only |
-| `lib/notify.ts` | Lazy Resend email notifications |
+| `lib/notify.ts` | Lazy Resend email notifications — incl. `sendOTTokenExpired` |
+| `lib/otAuth.ts` | `flagOTTokenExpired` — flags `OTGuestProfile.bearerExpiredAt` + emails once on OT 401 |
 | `lib/auth.ts` | NextAuth v5 config |
 | `app/api/cron/snipe/route.ts` | Cron handler — processes SNIPE + WATCH targets for both platforms, auto-fallback |
 | `app/api/targets/[id]/snipe/route.ts` | On-demand immediate snipe with auto-fallback (Resy + OT) |

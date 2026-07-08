@@ -4,6 +4,7 @@ import { decrypt, encrypt } from "@/lib/crypto"
 import { resyLogin, findSlots, pickBestSlot, bookSlot } from "@/lib/resy"
 import { findOTSlots, pickBestOTSlot, bookOTSlot, OTOverlapError, OTAuthError } from "@/lib/opentable"
 import { sendBookingSuccess, sendBookingFailed } from "@/lib/notify"
+import { flagOTTokenExpired } from "@/lib/otAuth"
 
 // Worst case: ~55s pre-warm sleep + ~30s polling window. Set generously
 // above that so Vercel never kills the function mid-snipe.
@@ -347,22 +348,17 @@ async function processOTTarget(target: TargetRow) {
   } catch (err: unknown) {
     if (err instanceof OTAuthError) {
       console.error("[cron/ot] auth error — token expired", { targetId: target.id, userId: target.userId })
+      // Keep the target alive so it resumes once the user reconnects, instead of
+      // marking it FAILED (a token expiry isn't the target's fault). Flag the
+      // profile + email the user once (deduped across all their OT targets).
       await prisma.reservationTarget.update({
         where: { id: target.id },
-        data: { status: "FAILED", lastAttemptAt: new Date() },
+        data: { lastAttemptAt: new Date() },
       })
       await prisma.snipeAttempt.create({
         data: { targetId: target.id, success: false, error: err.message },
       })
-      if (target.notificationEmail) {
-        await sendBookingFailed({
-          to: target.notificationEmail,
-          restaurantName: target.venueName,
-          date: dateStr,
-          error: err.message,
-          platform: "OPENTABLE",
-        }).catch((e) => console.error("[notify] email send failed", e))
-      }
+      await flagOTTokenExpired(target.userId, target.notificationEmail)
       return { success: false, error: "auth_expired" }
     }
     throw err

@@ -5,6 +5,7 @@ import { decrypt, encrypt } from "@/lib/crypto"
 import { resyLogin, findSlots, pickBestSlot, bookSlot } from "@/lib/resy"
 import { findOTSlots, pickBestOTSlot, bookOTSlot, OTOverlapError, OTAuthError } from "@/lib/opentable"
 import { sendBookingSuccess, sendBookingFailed } from "@/lib/notify"
+import { flagOTTokenExpired } from "@/lib/otAuth"
 
 export async function POST(
   _req: NextRequest,
@@ -184,12 +185,11 @@ async function handleOTSnipe({ id, target, dateStr, stillFuture, userId }: {
     // Expired bearer token — mark FAILED and tell the user to reconnect
     if (err instanceof OTAuthError) {
       console.error("[snipe/ot] auth error — token expired", { targetId: id, userId })
-      await prisma.reservationTarget.update({ where: { id }, data: { status: "FAILED" } })
+      // Leave the target as-is (don't mark FAILED — expiry isn't the target's
+      // fault). Flag the profile + email the user once so they reconnect.
       await prisma.snipeAttempt.create({ data: { targetId: id, success: false, error: err.message } })
-      if (target.notificationEmail) {
-        await sendBookingFailed({ to: target.notificationEmail, restaurantName: target.venueName, date: dateStr, error: err.message, platform: "OPENTABLE" }).catch((e) => console.error("[notify] email send failed", e))
-      }
-      return NextResponse.json({ success: false, message: err.message }, { status: 401 })
+      await flagOTTokenExpired(userId, target.notificationEmail)
+      return NextResponse.json({ success: false, message: err.message, code: "ot_token_expired" }, { status: 401 })
     }
     const error = err instanceof Error ? err.message : String(err)
     console.error("[snipe/ot] booking error", { targetId: id, error })

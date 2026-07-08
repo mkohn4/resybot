@@ -55,6 +55,7 @@ export async function POST(req: NextRequest) {
       cardLast4: otUser.cardLast4,
       gpid: otUser.gpid,
       customerId: otUser.customerId,
+      bearerExpiredAt: null, // fresh token — clear any prior expiry flag
     },
     create: {
       userId: session.user.id,

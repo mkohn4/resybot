@@ -53,3 +53,22 @@ export async function sendBookingFailed(opts: {
     `,
   })
 }
+
+// Sent once when the OpenTable bearer token stops working (401).
+// Tells the user exactly what to do — recapture and paste a fresh token.
+export async function sendOTTokenExpired(opts: { to: string; appUrl?: string }) {
+  const { to } = opts
+  const appUrl = opts.appUrl ?? process.env.NEXTAUTH_URL ?? "https://resybot.vercel.app"
+  await resend().emails.send({
+    from: FROM,
+    to,
+    subject: "⚠️ Your OpenTable connection expired — action needed",
+    html: `
+      <h2>OpenTable disconnected</h2>
+      <p>Your OpenTable bearer token stopped working, so ResyBot has paused all your OpenTable snipes and watches.</p>
+      <p><strong>To reconnect:</strong> capture a fresh bearer token from the OpenTable iOS app (Proxyman), then open ResyBot → account menu → <em>Connect OpenTable</em> and paste it in.</p>
+      <p><a href="${appUrl}/dashboard">Open ResyBot</a></p>
+      <p style="color:#888;font-size:12px">You'll only get this email once per expiry. Your Resy snipes are unaffected.</p>
+    `,
+  })
+}
