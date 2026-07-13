@@ -149,6 +149,12 @@ Method: GET
 Schedule: every 1 minute
 Header: `Authorization: Bearer <CRON_SECRET>`
 
+## Neon cost / DB cleanup
+
+The 1-min cron queries the DB every tick (recovery updateMany, SNIPE claim, watch findMany, auto-expire), so **the Neon compute never auto-suspends — it's billed as always-on (~730 CU-hours/mo)**. This is inherent to a 1-min sniper, not a bug. Keep the compute at the **smallest size (0.25 CU)**; per-query load is tiny (3 users, single-digit targets).
+
+`SnipeAttempt` is the one unbounded grower: one diagnostic row per watch/snipe per tick (~1440/day per active watch), and the 7-day target cleanup never touches attempts for *active* watches. The daily cleanup (first cron tick of UTC hour 0) now also **prunes `SnipeAttempt` rows older than 48h**. A plain DELETE leaves dead tuples — after a large manual purge, run `VACUUM FULL "SnipeAttempt"` to reclaim disk (one-time backfill in Jul 2026 took it from 34 MB/116k rows → 1.4 MB). Neon has no CLI/API key stored locally; compute size + autosuspend are only viewable/editable in the Neon console.
+
 ## OT bookedSlot format
 
 OT stores `bookedSlot` as `"2026-07-10T20:00"` (ISO with `T`). Resy stores it as `"2026-07-10 20:00:00"` (space-separated). Any time display code must handle both — use `split("T")[1] ?? split(" ")[1]` to extract the time portion, and guard against `NaN` from `parseInt`.

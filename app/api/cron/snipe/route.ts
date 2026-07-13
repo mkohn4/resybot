@@ -92,7 +92,8 @@ export async function GET(req: NextRequest) {
       data: { status: "FAILED" },
     })
 
-    // Delete old BOOKED/FAILED/CANCELLED targets once per day (at the first cron tick of each hour 0)
+    // Daily cleanup (first cron tick of UTC hour 0). Runs once/day to avoid
+    // adding DB work to every tick.
     if (now.getUTCHours() === 0 && now.getUTCMinutes() < 2) {
       const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
       await prisma.reservationTarget.deleteMany({
@@ -101,6 +102,16 @@ export async function GET(req: NextRequest) {
           date: { lt: sevenDaysAgo },
         },
       })
+      // Prune SnipeAttempt diagnostic rows older than 48h. These are per-tick
+      // watch/snipe logs — for an active watch they accumulate ~1440/day forever
+      // and are only useful for recent debugging. The 7-day target cleanup above
+      // never touches attempts for *active* watches (their target still exists),
+      // so without this the table grows unbounded (was 34 MB / 116k rows).
+      const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000)
+      const pruned = await prisma.snipeAttempt.deleteMany({
+        where: { attemptAt: { lt: fortyEightHoursAgo } },
+      })
+      if (pruned.count > 0) console.log("[cron] pruned old SnipeAttempt rows", { count: pruned.count })
     }
 
     if (targetsWithCreds.length === 0) return NextResponse.json({ processed: 0 })
