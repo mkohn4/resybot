@@ -26,6 +26,7 @@ type Target = {
   neighborhood: string | null
   cuisine: string | null
   date: Date
+  dateEnd: Date | null
   partySize: number
   preferredTimes: string[]
   snipeAt: Date
@@ -133,12 +134,15 @@ export function TargetCard({
     return u.toString()
   })()
 
-  const reservationDate = new Date(target.date).toLocaleDateString("en-US", {
+  const fmtDate = (d: Date | string) => new Date(d).toLocaleDateString("en-US", {
     weekday: "short",
     month: "short",
     day: "numeric",
     year: "numeric",
   })
+  const reservationDate = target.dateEnd
+    ? `${fmtDate(target.date)} – ${fmtDate(target.dateEnd)}`
+    : fmtDate(target.date)
 
   const snipeDate = new Date(target.snipeAt).toLocaleString("en-US", {
     timeZone: "America/New_York",

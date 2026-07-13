@@ -34,6 +34,7 @@ export function AddTargetModal({
   const [useCustom, setUseCustom] = useState(false)
 
   const [date, setDate] = useState("")
+  const [dateEnd, setDateEnd] = useState("")  // Watch mode: optional end of date range
   const [partySize, setPartySize] = useState(2)
   const [preferredTimes, setPreferredTimes] = useState<string[]>(DEFAULT_TIMES)
   const [snipeAt, setSnipeAt] = useState("")
@@ -261,6 +262,7 @@ export function AddTargetModal({
           neighborhood: selected?.neighborhood ?? null,
           cuisine: selected?.cuisine ?? null,
           date: new Date(date + "T12:00:00").toISOString(),
+          dateEnd: mode === "watch" && dateEnd ? new Date(dateEnd + "T12:00:00").toISOString() : undefined,
           partySize,
           preferredTimes,
           snipeAt: snipeTime,
@@ -564,14 +566,46 @@ export function AddTargetModal({
 
         {/* Date */}
         <div className="mb-4">
-          <label className="text-sm text-gray-400 mb-1.5 block">Reservation Date</label>
-          <input
-            type="date"
-            value={date}
-            min={mode === "now" ? new Date().toISOString().split("T")[0] : minDate}
-            onChange={(e) => setDate(e.target.value)}
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-emerald-500 text-sm"
-          />
+          <label className="text-sm text-gray-400 mb-1.5 block">
+            {mode === "watch" ? "Reservation Dates" : "Reservation Date"}
+          </label>
+          {mode === "watch" ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={date}
+                min={minDate}
+                onChange={(e) => {
+                  setDate(e.target.value)
+                  // keep end >= start
+                  if (dateEnd && e.target.value && dateEnd < e.target.value) setDateEnd(e.target.value)
+                }}
+                className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-emerald-500 text-sm"
+              />
+              <span className="text-gray-500 text-sm shrink-0">through</span>
+              <input
+                type="date"
+                value={dateEnd}
+                min={date || minDate}
+                onChange={(e) => setDateEnd(e.target.value)}
+                placeholder="optional"
+                className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-emerald-500 text-sm"
+              />
+            </div>
+          ) : (
+            <input
+              type="date"
+              value={date}
+              min={mode === "now" ? new Date().toISOString().split("T")[0] : minDate}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-emerald-500 text-sm"
+            />
+          )}
+          {mode === "watch" && (
+            <p className="text-gray-500 text-xs mt-1.5">
+              Leave the second date blank to watch a single day. Set it to watch a range (up to 14 days) — books the first day a slot opens.
+            </p>
+          )}
         </div>
 
         {/* Party size */}

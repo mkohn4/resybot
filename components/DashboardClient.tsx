@@ -16,6 +16,7 @@ type Target = {
   neighborhood: string | null
   cuisine: string | null
   date: Date
+  dateEnd: Date | null
   partySize: number
   preferredTimes: string[]
   snipeAt: Date

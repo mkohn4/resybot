@@ -75,6 +75,7 @@ model ReservationTarget {
   neighborhood      String?
   cuisine           String?
   date              DateTime
+  dateEnd           DateTime?    // WATCH only: inclusive end of a date range. null = single-day watch
   partySize         Int          @default(2)
   preferredTimes    String[]
   mode              TargetMode   @default(SNIPE)

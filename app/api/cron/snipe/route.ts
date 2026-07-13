@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     // Prevents concurrent cron invocations from double-processing the same target
     type RawTarget = {
       id: string; userId: string; platform: string; venueId: number; venueName: string
-      date: Date; snipeAt: Date | null; partySize: number; preferredTimes: string[]
+      date: Date; dateEnd: Date | null; snipeAt: Date | null; partySize: number; preferredTimes: string[]
       mode: string; status: string; notificationEmail: string | null
       lastAttemptAt: Date | null; bookedSlot: string | null
     }
@@ -53,10 +53,11 @@ export async function GET(req: NextRequest) {
     // comfortably exceeds any real overlap window.
     const watchTargets = await prisma.reservationTarget.findMany({
       where: {
-        status: "WATCHING", mode: "WATCH", date: { gte: now },
-        OR: [
-          { lastAttemptAt: null },
-          { lastAttemptAt: { lt: new Date(now.getTime() - 20_000) } },
+        status: "WATCHING", mode: "WATCH",
+        AND: [
+          // Still live if the effective end (dateEnd for a range, else date) hasn't passed
+          { OR: [{ dateEnd: null, date: { gte: now } }, { dateEnd: { gte: now } }] },
+          { OR: [{ lastAttemptAt: null }, { lastAttemptAt: { lt: new Date(now.getTime() - 20_000) } }] },
         ],
       },
     })
@@ -81,9 +82,13 @@ export async function GET(req: NextRequest) {
       },
     }))
 
-    // Auto-expire WATCH targets whose date has passed
+    // Auto-expire WATCH targets whose effective end has passed (dateEnd for a
+    // range watch, else the single date)
     await prisma.reservationTarget.updateMany({
-      where: { mode: "WATCH", status: "WATCHING", date: { lt: now } },
+      where: {
+        mode: "WATCH", status: "WATCHING",
+        OR: [{ dateEnd: null, date: { lt: now } }, { dateEnd: { lt: now } }],
+      },
       data: { status: "FAILED" },
     })
 
@@ -126,6 +131,7 @@ export type TargetRow = {
   venueId: number
   venueName: string
   date: Date
+  dateEnd: Date | null
   snipeAt: Date | null
   partySize: number
   preferredTimes: string[]
@@ -156,6 +162,27 @@ export async function processTarget(target: TargetRow) {
   return target.platform === "OPENTABLE"
     ? processOTTarget(target)
     : processResyTarget(target)
+}
+
+// WATCH targets may span a date range (target.date → target.dateEnd inclusive).
+// Returns the YYYY-MM-DD strings to check this tick: every day from today (past
+// days can't be booked) through the range end, chronological so the earliest
+// bookable day wins. dateEnd null → single-day watch. Capped at 14 days to bound
+// per-tick API calls (see the single-IP scaling note).
+const MAX_WATCH_DAYS = 14
+export function watchDateStrings(target: { date: Date; dateEnd: Date | null }): string[] {
+  const startStr = target.date.toISOString().split("T")[0]
+  const endStr = (target.dateEnd ?? target.date).toISOString().split("T")[0]
+  const todayStr = new Date().toISOString().split("T")[0]
+  const fromStr = startStr < todayStr ? todayStr : startStr
+  const dates: string[] = []
+  let cur = new Date(`${fromStr}T00:00:00Z`)
+  const end = new Date(`${endStr}T00:00:00Z`)
+  while (cur <= end && dates.length < MAX_WATCH_DAYS) {
+    dates.push(cur.toISOString().split("T")[0])
+    cur = new Date(cur.getTime() + 24 * 60 * 60 * 1000)
+  }
+  return dates
 }
 
 // Diagnostic: turn the raw slot list into a compact "HH:MM" summary so a miss
@@ -218,40 +245,52 @@ async function processResyTarget(target: TargetRow) {
     if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs))
   }
 
-  const deadline = isWatch ? Date.now() + 1_000 : Date.now() + 30_000
   let lastError = ""
   let lastSeen = ""  // diagnostic: times the API returned on the last check
 
+  const bookResyDay = async (day: string, best: NonNullable<ReturnType<typeof pickBestSlot>>) => {
+    await bookSlot(authToken, paymentMethodId, best.config.token, day, target.partySize)
+    const slot = best.date.start
+    await prisma.reservationTarget.update({
+      where: { id: target.id },
+      data: { status: "BOOKED", bookedSlot: slot, lastAttemptAt: new Date() },
+    })
+    await prisma.snipeAttempt.create({ data: { targetId: target.id, success: true, slot } })
+    if (target.notificationEmail) {
+      const time = slot.split(" ")[1]?.substring(0, 5) ?? ""
+      await sendBookingSuccess({ to: target.notificationEmail, restaurantName: target.venueName, date: day, time, partySize: target.partySize, platform: "RESY" }).catch((e) => console.error("[notify] email send failed", e))
+    }
+    return { success: true, slot }
+  }
+
+  if (isWatch) {
+    // Watch each day in the range (single day if no dateEnd). First day with a
+    // matching preferred time gets booked and the whole target is done.
+    for (const day of watchDateStrings(target)) {
+      try {
+        const slots = await findSlots(target.venueId, day, target.partySize, authToken)
+        lastSeen = summarizeTimes(slots.map((s) => s.date.start.split(" ")[1]?.substring(0, 5) ?? "").filter(Boolean))
+        const best = pickBestSlot(slots, target.preferredTimes, day)
+        if (best) return await bookResyDay(day, best)
+      } catch (err: unknown) {
+        lastError = err instanceof Error ? err.message : String(err)
+      }
+    }
+    await prisma.snipeAttempt.create({ data: { targetId: target.id, success: false, error: lastSeen || lastError || "No slots this check" } })
+    return { success: false, watching: true }
+  }
+
+  const deadline = Date.now() + 30_000
   while (Date.now() < deadline) {
     try {
       const slots = await findSlots(target.venueId, dateStr, target.partySize, authToken)
       lastSeen = summarizeTimes(slots.map((s) => s.date.start.split(" ")[1]?.substring(0, 5) ?? "").filter(Boolean))
       const best = pickBestSlot(slots, target.preferredTimes, dateStr)
-
-      if (best) {
-        await bookSlot(authToken, paymentMethodId, best.config.token, dateStr, target.partySize)
-        const slot = best.date.start
-        await prisma.reservationTarget.update({
-          where: { id: target.id },
-          data: { status: "BOOKED", bookedSlot: slot, lastAttemptAt: new Date() },
-        })
-        await prisma.snipeAttempt.create({ data: { targetId: target.id, success: true, slot } })
-        if (target.notificationEmail) {
-          const time = slot.split(" ")[1]?.substring(0, 5) ?? ""
-          await sendBookingSuccess({ to: target.notificationEmail, restaurantName: target.venueName, date: dateStr, time, partySize: target.partySize, platform: "RESY" }).catch((e) => console.error("[notify] email send failed", e))
-        }
-        return { success: true, slot }
-      }
+      if (best) return await bookResyDay(dateStr, best)
     } catch (err: unknown) {
       lastError = err instanceof Error ? err.message : String(err)
     }
-    if (!isWatch) await new Promise((r) => setTimeout(r, 500))
-    else break
-  }
-
-  if (isWatch) {
-    await prisma.snipeAttempt.create({ data: { targetId: target.id, success: false, error: lastSeen || "No slots this check" } })
-    return { success: false, watching: true }
+    await new Promise((r) => setTimeout(r, 500))
   }
 
   return fallbackOrFail(target, lastError || lastSeen)
@@ -285,7 +324,6 @@ async function processOTTarget(target: TargetRow) {
   }
 
   try {
-    const deadline = isWatch ? Date.now() + 1_000 : Date.now() + 30_000
     let lastError = ""
 
     const bearerToken = decrypt(profile.encryptedBearerToken)
@@ -293,55 +331,74 @@ async function processOTTarget(target: TargetRow) {
     const skipSlots = new Set<string>()
     let lastSeen = ""  // diagnostic: times the API returned on the last check
 
+    const finalizeOTBook = async (day: string, slot: string) => {
+      await prisma.reservationTarget.update({
+        where: { id: target.id },
+        data: { status: "BOOKED", bookedSlot: slot, lastAttemptAt: new Date() },
+      })
+      await prisma.snipeAttempt.create({ data: { targetId: target.id, success: true, slot } })
+      if (target.notificationEmail) {
+        const time = slot.split("T")[1]?.substring(0, 5) ?? ""
+        await sendBookingSuccess({ to: target.notificationEmail, restaurantName: target.venueName, date: day, time, partySize: target.partySize, platform: "OPENTABLE" }).catch((e) => console.error("[notify] email send failed", e))
+      }
+    }
+
+    // Check one day: find slots, book the best matching preferred time. Returns
+    // the booked slot string, or null if nothing matched this day. Throws on
+    // OTAuthError so the outer handler flags the expired token.
+    const checkOTDay = async (day: string): Promise<string | null> => {
+      const slots = await findOTSlots(target.venueId, day, target.partySize, bearerToken)
+      lastSeen = summarizeTimes(slots.map((s) => s.dateTime.split("T")[1]?.substring(0, 5) ?? "").filter(Boolean))
+      const best = pickBestOTSlot(slots, target.preferredTimes, skipSlots)
+      if (!best) return null
+      try {
+        await bookOTSlot(target.venueId, best, target.partySize, {
+          firstName: profile.firstName,
+          lastName: decrypt(profile.encryptedLastName),
+          email: guestEmail,
+          phone: decrypt(profile.encryptedPhone),
+          gpid: profile.gpid,
+          customerId: profile.customerId,
+          cardToken: profile.encryptedCardToken ? decrypt(profile.encryptedCardToken) : "",
+          cardLast4: profile.cardLast4,
+        }, bearerToken)
+      } catch (bookErr) {
+        if (bookErr instanceof OTOverlapError) {
+          skipSlots.add(best.dateTime)
+          lastError = bookErr.message
+          return null
+        }
+        throw bookErr
+      }
+      return best.dateTime
+    }
+
+    if (isWatch) {
+      // Watch each day in the range (single day if no dateEnd). First day with a
+      // matching preferred time gets booked and the whole target is done.
+      for (const day of watchDateStrings(target)) {
+        try {
+          const slot = await checkOTDay(day)
+          if (slot) { await finalizeOTBook(day, slot); return { success: true, slot } }
+        } catch (err: unknown) {
+          if (err instanceof OTAuthError) throw err
+          lastError = err instanceof Error ? err.message : String(err)
+        }
+      }
+      await prisma.snipeAttempt.create({ data: { targetId: target.id, success: false, error: lastSeen || lastError || "No slots this check" } })
+      return { success: false, watching: true }
+    }
+
+    const deadline = Date.now() + 30_000
     while (Date.now() < deadline) {
       try {
-        const slots = await findOTSlots(target.venueId, dateStr, target.partySize, bearerToken)
-        lastSeen = summarizeTimes(slots.map((s) => s.dateTime.split("T")[1]?.substring(0, 5) ?? "").filter(Boolean))
-        const best = pickBestOTSlot(slots, target.preferredTimes, skipSlots)
-
-        if (best) {
-          try {
-            await bookOTSlot(target.venueId, best, target.partySize, {
-              firstName: profile.firstName,
-              lastName: decrypt(profile.encryptedLastName),
-              email: guestEmail,
-              phone: decrypt(profile.encryptedPhone),
-              gpid: profile.gpid,
-              customerId: profile.customerId,
-              cardToken: profile.encryptedCardToken ? decrypt(profile.encryptedCardToken) : "",
-              cardLast4: profile.cardLast4,
-            }, bearerToken)
-          } catch (bookErr) {
-            if (bookErr instanceof OTOverlapError) {
-              skipSlots.add(best.dateTime)
-              lastError = bookErr.message
-              continue
-            }
-            throw bookErr
-          }
-          const slot = best.dateTime
-          await prisma.reservationTarget.update({
-            where: { id: target.id },
-            data: { status: "BOOKED", bookedSlot: slot, lastAttemptAt: new Date() },
-          })
-          await prisma.snipeAttempt.create({ data: { targetId: target.id, success: true, slot } })
-          if (target.notificationEmail) {
-            const time = slot.split("T")[1]?.substring(0, 5) ?? ""
-            await sendBookingSuccess({ to: target.notificationEmail, restaurantName: target.venueName, date: dateStr, time, partySize: target.partySize, platform: "OPENTABLE" }).catch((e) => console.error("[notify] email send failed", e))
-          }
-          return { success: true, slot }
-        }
+        const slot = await checkOTDay(dateStr)
+        if (slot) { await finalizeOTBook(dateStr, slot); return { success: true, slot } }
       } catch (err: unknown) {
         if (err instanceof OTAuthError) throw err
         lastError = err instanceof Error ? err.message : String(err)
       }
-      if (!isWatch) await new Promise((r) => setTimeout(r, 500))
-      else break
-    }
-
-    if (isWatch) {
-      await prisma.snipeAttempt.create({ data: { targetId: target.id, success: false, error: lastSeen || "No slots this check" } })
-      return { success: false, watching: true }
+      await new Promise((r) => setTimeout(r, 500))
     }
 
     return fallbackOrFail(target, lastError || lastSeen)

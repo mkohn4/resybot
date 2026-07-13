@@ -97,6 +97,10 @@ Times are tried in array order — **NO automatic sort**. The UI preserves click
 
 Watch targets stop at **noon on the reservation date**. The `date` field is stored as `YYYY-MM-DDT12:00:00` (noon local). The cron only picks up targets where `date >= now`, and auto-expires (marks FAILED) where `date < now`. This gives you the morning of the reservation to make other plans if the bot didn't find anything.
 
+## Watch date range (multi-day watch)
+
+Watch targets can span a **date range** via the optional nullable `dateEnd` column (`date` → `dateEnd` inclusive; null = single-day watch, fully backward compatible). Scheduled snipe is single-day only — a drop fires at one time for one date. On each cron tick, `watchDateStrings(target)` in `app/api/cron/snipe/route.ts` yields the `YYYY-MM-DD` days to check (from today or `date`, whichever is later, through `dateEnd`), chronological, **capped at 14 days** (`MAX_WATCH_DAYS`) to bound per-tick API calls against the single-IP scaling ceiling. The watch loop (both Resy and OT) checks each day in order and **books the first day** with a matching preferred time → status BOOKED, target done (one reservation total). Expiry, the WATCH-fetch query, and auto-FAILED all key off the effective end (`dateEnd ?? date`), not `date`. The `POST /api/targets` route validates `dateEnd` (WATCH only): must parse, be ≥ `date`, span ≤ 14 days; a single-day range collapses to null. The Add Target modal shows a "through" end-date input in Watch mode; `TargetCard` renders `date – dateEnd`. Not yet PATCH-editable (inline edit still only does party size + preferred times).
+
 ## Auto-fallback behavior
 
 When a SNIPE target misses (no slots found in the 10s window), the cron handler automatically switches it to `mode=WATCH, status=WATCHING` if the reservation date is still in the future. Same applies to on-demand Try Now/Book Now snipes. Only marks FAILED if the reservation date has passed.

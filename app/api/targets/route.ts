@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const body = await req.json()
-  const { venueId, venueName, neighborhood, cuisine, date, partySize, preferredTimes, snipeAt, notificationEmail, mode, platform } = body
+  const { venueId, venueName, neighborhood, cuisine, date, dateEnd, partySize, preferredTimes, snipeAt, notificationEmail, mode, platform } = body
 
   if (!venueId || !venueName || !date || !snipeAt) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
@@ -46,6 +46,25 @@ export async function POST(req: NextRequest) {
   }
 
   const isWatch = mode === "WATCH"
+
+  // Optional date range (WATCH only): dateEnd is the inclusive last day to watch.
+  // Must parse, be >= date, and span at most 14 days to bound per-tick API calls.
+  let dateEndObj: Date | null = null
+  if (dateEnd && isWatch) {
+    dateEndObj = new Date(dateEnd)
+    if (Number.isNaN(dateEndObj.getTime())) {
+      return NextResponse.json({ error: "Invalid end date" }, { status: 400 })
+    }
+    if (dateEndObj < dateObj) {
+      return NextResponse.json({ error: "End date must be on or after the start date" }, { status: 400 })
+    }
+    const spanDays = Math.round((dateEndObj.getTime() - dateObj.getTime()) / (24 * 60 * 60 * 1000))
+    if (spanDays > 14) {
+      return NextResponse.json({ error: "Watch range can span at most 14 days" }, { status: 400 })
+    }
+    // Collapse a single-day range to null so it behaves like a normal watch
+    if (dateEndObj.toISOString().split("T")[0] === dateObj.toISOString().split("T")[0]) dateEndObj = null
+  }
 
   // Reject reservation dates before today. The date is stored as noon, so a same-day
   // booking (e.g. "Book Now for tonight") is still allowed even if it's already past
@@ -82,6 +101,7 @@ export async function POST(req: NextRequest) {
       neighborhood,
       cuisine,
       date: dateObj,
+      dateEnd: dateEndObj,
       partySize: partySizeNum,
       preferredTimes: times,
       snipeAt: snipeAtObj,
