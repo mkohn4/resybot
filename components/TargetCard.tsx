@@ -76,10 +76,18 @@ export function TargetCard({
   const [editError, setEditError] = useState("")
   const [editTimes, setEditTimes] = useState<string[]>(target.preferredTimes)
   const [editPartySize, setEditPartySize] = useState(target.partySize)
+  // YYYY-MM-DD for the date inputs. dateEnd is "" when there's no range.
+  const isoDay = (d: Date | string) => new Date(d).toISOString().split("T")[0]
+  const [editDate, setEditDate] = useState(isoDay(target.date))
+  const [editDateEnd, setEditDateEnd] = useState(target.dateEnd ? isoDay(target.dateEnd) : "")
+
+  const isWatch = target.status === "WATCHING"
 
   function startEdit() {
     setEditTimes(target.preferredTimes)
     setEditPartySize(target.partySize)
+    setEditDate(isoDay(target.date))
+    setEditDateEnd(target.dateEnd ? isoDay(target.dateEnd) : "")
     setEditError("")
     setEditing(true)
     setExpanded(false)
@@ -97,10 +105,18 @@ export function TargetCard({
     setSaving(true)
     setEditError("")
     try {
+      // Watch targets can also edit the reservation date / range. Store as noon
+      // (T12:00:00) to match creation. dateEnd "" clears the range (→ null).
+      const dateFields = isWatch
+        ? {
+            date: new Date(editDate + "T12:00:00").toISOString(),
+            dateEnd: editDateEnd ? new Date(editDateEnd + "T12:00:00").toISOString() : null,
+          }
+        : {}
       const res = await fetch(`/api/targets/${target.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ preferredTimes: editTimes, partySize: editPartySize }),
+        body: JSON.stringify({ preferredTimes: editTimes, partySize: editPartySize, ...dateFields }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
@@ -304,6 +320,33 @@ export function TargetCard({
 
       {editing && (
         <div className="border-t border-gray-800 px-4 py-3 space-y-4">
+          {/* Watch date / range */}
+          {isWatch && (
+            <div>
+              <p className="text-gray-500 text-xs uppercase tracking-wider mb-1.5">Reservation Dates</p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => {
+                    setEditDate(e.target.value)
+                    if (editDateEnd && e.target.value && editDateEnd < e.target.value) setEditDateEnd(e.target.value)
+                  }}
+                  className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-sm"
+                />
+                <span className="text-gray-500 text-xs shrink-0">through</span>
+                <input
+                  type="date"
+                  value={editDateEnd}
+                  min={editDate}
+                  onChange={(e) => setEditDateEnd(e.target.value)}
+                  className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-sm"
+                />
+              </div>
+              <p className="text-gray-500 text-xs mt-1">Leave the second date blank to watch a single day (up to 14 days).</p>
+            </div>
+          )}
+
           {/* Party size */}
           <div>
             <p className="text-gray-500 text-xs uppercase tracking-wider mb-1.5">Party Size</p>
