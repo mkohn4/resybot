@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/db"
+import { MAX_WATCH_SPAN_DAYS } from "@/app/api/cron/snipe/route"
 
 export async function DELETE(
   _req: NextRequest,
@@ -56,7 +57,7 @@ export async function PATCH(
       const start = dateData.date ?? target.date
       if (end < start) return NextResponse.json({ error: "End date must be on or after the start date" }, { status: 400 })
       const spanDays = Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000))
-      if (spanDays > 14) return NextResponse.json({ error: "Watch range can span at most 14 days" }, { status: 400 })
+      if (spanDays > MAX_WATCH_SPAN_DAYS) return NextResponse.json({ error: `Watch range can span at most ${MAX_WATCH_SPAN_DAYS} days` }, { status: 400 })
       // Collapse a single-day range to null
       dateData.dateEnd = end.toISOString().split("T")[0] === start.toISOString().split("T")[0] ? null : end
     }

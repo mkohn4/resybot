@@ -164,12 +164,16 @@ export async function processTarget(target: TargetRow) {
     : processResyTarget(target)
 }
 
+// Max span (in days *between* start and end) allowed for a watch range. Aug 2 →
+// Aug 16 is a span of 14 = 15 inclusive days. Bounds per-tick API calls (see the
+// single-IP scaling note). Shared with POST /api/targets validation so the limit
+// that's enforced matches the limit that's actually checked.
+export const MAX_WATCH_SPAN_DAYS = 14
+
 // WATCH targets may span a date range (target.date → target.dateEnd inclusive).
 // Returns the YYYY-MM-DD strings to check this tick: every day from today (past
 // days can't be booked) through the range end, chronological so the earliest
-// bookable day wins. dateEnd null → single-day watch. Capped at 14 days to bound
-// per-tick API calls (see the single-IP scaling note).
-const MAX_WATCH_DAYS = 14
+// bookable day wins. dateEnd null → single-day watch.
 export function watchDateStrings(target: { date: Date; dateEnd: Date | null }): string[] {
   const startStr = target.date.toISOString().split("T")[0]
   const endStr = (target.dateEnd ?? target.date).toISOString().split("T")[0]
@@ -178,7 +182,8 @@ export function watchDateStrings(target: { date: Date; dateEnd: Date | null }): 
   const dates: string[] = []
   let cur = new Date(`${fromStr}T00:00:00Z`)
   const end = new Date(`${endStr}T00:00:00Z`)
-  while (cur <= end && dates.length < MAX_WATCH_DAYS) {
+  // +1: a span of N days is N+1 inclusive calendar days
+  while (cur <= end && dates.length < MAX_WATCH_SPAN_DAYS + 1) {
     dates.push(cur.toISOString().split("T")[0])
     cur = new Date(cur.getTime() + 24 * 60 * 60 * 1000)
   }
