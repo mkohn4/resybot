@@ -1,9 +1,5 @@
 import { PrismaClient } from "@prisma/client"
-import { PrismaNeon } from "@prisma/adapter-neon"
-import { neonConfig } from "@neondatabase/serverless"
-import ws from "ws"
-
-neonConfig.webSocketConstructor = ws
+import { PrismaPg } from "@prisma/adapter-pg"
 
 declare global {
   // eslint-disable-next-line no-var
@@ -19,8 +15,9 @@ function createPrismaClient(): PrismaClient {
       },
     })
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const adapter = new PrismaNeon({ connectionString: url } as any)
+  // Standard Postgres (Supabase) via the node-postgres driver adapter. Runtime
+  // uses the Supavisor pooler URL (IPv4, port 6543) — see .env.local.
+  const adapter = new PrismaPg({ connectionString: url })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return new PrismaClient({ adapter } as any)
 }

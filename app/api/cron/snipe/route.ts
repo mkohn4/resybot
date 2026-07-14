@@ -63,7 +63,8 @@ export async function GET(req: NextRequest) {
     })
     const targets = [...snipeTargets, ...watchTargets]
 
-    // Fetch credentials separately — Neon HTTP adapter doesn't support nested includes
+    // Fetch credentials separately — kept as flat queries (nested includes were
+    // flattened for the old Neon adapter; harmless to keep on standard Postgres)
     const userIds = [...new Set(targets.map((t) => t.userId))]
     const [credentials, otProfiles] = userIds.length > 0
       ? await Promise.all([

@@ -15,14 +15,16 @@ Self-hosted NYC restaurant reservation sniper. Users sign in with Google, store 
 
 - **Next.js 16** App Router + TypeScript + Tailwind CSS
 - **NextAuth v5** with Google OAuth and PrismaAdapter
-- **Prisma 7** + Neon Postgres via `PrismaNeon` WebSocket adapter (`@prisma/adapter-neon`)
+- **Prisma 7** + Supabase Postgres via `PrismaPg` driver adapter (`@prisma/adapter-pg` + `pg`). Migrated off Neon (Jul 2026) because Neon's compute-hour free tier can't sustain an always-on 1-min-poll workload — see the DB hosting note below
 - **Resend** for email notifications (lazy-instantiated to avoid build-time errors)
 - **AES-256-GCM** encryption via Node.js `crypto`
 - **cron-job.org** for 1-minute polling (Vercel Hobby plan blocks sub-daily crons)
 
 ## Critical gotchas
 
-- Use `PrismaNeon` (WebSocket), **NOT** `PrismaNeonHttp` — the HTTP adapter doesn't support OR clauses, `updateMany`, nested includes, or anything requiring implicit transactions
+- DB connects via `@prisma/adapter-pg` (`PrismaPg`) to Supabase's poolers. **Runtime (`DATABASE_URL`)** = transaction pooler, port **6543**, `?pgbouncer=true` (IPv4; Vercel has no IPv6). **Migrations / `db push` (`DIRECT_URL`)** = session pooler, port **5432**. Do NOT use the direct `db.<ref>.supabase.co` URL — it's IPv6-only and unreachable from Vercel and most local machines
+- Prisma 7 no longer allows `url`/`directUrl` in `schema.prisma` — the datasource block is bare `provider = "postgresql"`; connection URLs live in `prisma.config.ts` (`datasource.url` = `DIRECT_URL ?? DATABASE_URL`) and are passed to the client via the adapter in `lib/db.ts`
+- Nested Prisma `include`s were flattened into separate queries for the old Neon HTTP adapter; harmless on standard Postgres, kept as-is
 - `middleware.ts` is renamed to `proxy.ts` in Next.js 16; export must be `auth as proxy`
 - `prisma/schema.prisma` has NO `url = env(...)` in the datasource block; URL is passed via the adapter in `lib/db.ts`
 - `prisma.config.ts` loads `.env.local` via `config({ path: ".env.local" })` — NOT `import "dotenv/config"` which only reads `.env`
@@ -119,7 +121,7 @@ Platform:     RESY | OPENTABLE
 |---|---|
 | `lib/resy.ts` | Resy API client — login, findSlots, pickBestSlot, bookSlot |
 | `lib/opentable.ts` | OpenTable mobile API client — findOTSlots, pickBestOTSlot, bookOTSlot, searchOTVenues |
-| `lib/db.ts` | Prisma client with PrismaNeon WebSocket adapter |
+| `lib/db.ts` | Prisma client with `PrismaPg` adapter (Supabase Postgres) |
 | `lib/crypto.ts` | AES-256-GCM encrypt/decrypt |
 | `lib/restaurants.ts` | 27 curated NYC restaurants + `suggestSnipeTime()`. Includes `platform` field — Don Angie is OT-only |
 | `lib/notify.ts` | Lazy Resend email notifications — incl. `sendOTTokenExpired` |
@@ -149,11 +151,11 @@ Method: GET
 Schedule: every 1 minute
 Header: `Authorization: Bearer <CRON_SECRET>`
 
-## Neon cost / DB cleanup
+## DB hosting / cost
 
-The 1-min cron queries the DB every tick (recovery updateMany, SNIPE claim, watch findMany, auto-expire), so **the Neon compute never auto-suspends — it's billed as always-on (~730 CU-hours/mo)**. This is inherent to a 1-min sniper, not a bug. Keep the compute at the **smallest size (0.25 CU)**; per-query load is tiny (3 users, single-digit targets).
+**Why Supabase, not Neon:** the 1-min cron queries the DB every tick (recovery updateMany, SNIPE claim, watch findMany, auto-expire), so the DB is effectively always-active. Neon's free tier bills by **compute-hours** (100/mo) and its compute only scale-to-zeros after 5 min idle — a 1-min poll keeps it awake 24/7 (~183 CU-hr/mo needed), exhausting the budget ~day 16 every month. Supabase's free tier is instead a **fixed always-on instance with no compute meter** (only pauses after 7 days of *total* inactivity, which the cron trivially prevents) → free indefinitely for an always-on workload. 500 MB storage limit, ample here.
 
-`SnipeAttempt` is the one unbounded grower: one diagnostic row per watch/snipe per tick (~1440/day per active watch), and the 7-day target cleanup never touches attempts for *active* watches. The daily cleanup (first cron tick of UTC hour 0) now also **prunes `SnipeAttempt` rows older than 48h**. A plain DELETE leaves dead tuples — after a large manual purge, run `VACUUM FULL "SnipeAttempt"` to reclaim disk (one-time backfill in Jul 2026 took it from 34 MB/116k rows → 1.4 MB). Neon has no CLI/API key stored locally; compute size + autosuspend are only viewable/editable in the Neon console.
+**`SnipeAttempt` growth:** the one unbounded grower — one diagnostic row per watch/snipe per tick (~1440/day per active watch), and the 7-day target cleanup never touches attempts for *active* watches. The daily cleanup (first cron tick of UTC hour 0) **prunes `SnipeAttempt` rows older than 48h**. A plain DELETE leaves dead tuples — after a large manual purge, run `VACUUM FULL "SnipeAttempt"` to reclaim disk.
 
 ## OT bookedSlot format
 
