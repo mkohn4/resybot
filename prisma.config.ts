@@ -6,12 +6,11 @@ import { defineConfig } from "prisma/config";
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
-  migrations: {
-    path: "prisma/migrations",
-  },
+  // No `migrations` block: this project uses `prisma db push` (schema-sync), not
+  // migration files. See CLAUDE.md.
   datasource: {
-    // Migrations / db push use the session pooler (port 5432, IPv4). DIRECT_URL
-    // falls back to DATABASE_URL for local dev if unset.
+    // `db push` uses the session pooler (port 5432, IPv4). DIRECT_URL falls back
+    // to DATABASE_URL for local dev if unset.
     url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],
   },
 });

@@ -24,6 +24,7 @@ Self-hosted NYC restaurant reservation sniper. Users sign in with Google, store 
 
 - DB connects via `@prisma/adapter-pg` (`PrismaPg`) to Supabase's poolers. **Runtime (`DATABASE_URL`)** = transaction pooler, port **6543**, `?pgbouncer=true` (IPv4; Vercel has no IPv6). **Migrations / `db push` (`DIRECT_URL`)** = session pooler, port **5432**. Do NOT use the direct `db.<ref>.supabase.co` URL — it's IPv6-only and unreachable from Vercel and most local machines
 - Prisma 7 no longer allows `url`/`directUrl` in `schema.prisma` — the datasource block is bare `provider = "postgresql"`; connection URLs live in `prisma.config.ts` (`datasource.url` = `DIRECT_URL ?? DATABASE_URL`) and are passed to the client via the adapter in `lib/db.ts`
+- **Schema changes use `prisma db push`, NOT migration files.** There is no `prisma/migrations/` folder and no `migrations` block in `prisma.config.ts` — `db push` syncs the schema directly (the `_prisma_migrations` table doesn't exist). Do NOT run `prisma migrate deploy`/`dev`. To change the schema: edit `schema.prisma` → `npx prisma db push` → `npx prisma generate`
 - Nested Prisma `include`s were flattened into separate queries for the old Neon HTTP adapter; harmless on standard Postgres, kept as-is
 - `middleware.ts` is renamed to `proxy.ts` in Next.js 16; export must be `auth as proxy`
 - `prisma/schema.prisma` has NO `url = env(...)` in the datasource block; URL is passed via the adapter in `lib/db.ts`
