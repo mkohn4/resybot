@@ -8,8 +8,8 @@ import { suggestSnipeTime } from "@/lib/restaurants"
 type VenueResult = Restaurant & { source?: "curated" | "resy" | "opentable"; platform?: "resy" | "opentable" }
 
 
-const LUNCH_TIMES   = ["11:30", "11:45", "12:00", "12:15", "12:30", "12:45", "13:00", "13:15", "13:30"]
-const DINNER_TIMES  = ["17:30", "17:45", "18:00", "18:15", "18:30", "18:45", "19:00", "19:15", "19:30", "19:45", "20:00", "20:15", "20:30", "20:45", "21:00", "21:15", "21:30", "21:45", "22:00", "22:15", "22:30"]
+const LUNCH_TIMES   = ["11:30", "11:45", "12:00", "12:15", "12:30", "12:45", "13:00", "13:15", "13:30", "13:45", "14:00", "14:15", "14:30", "14:45", "15:00"]
+const DINNER_TIMES  = ["17:00", "17:15", "17:30", "17:45", "18:00", "18:15", "18:30", "18:45", "19:00", "19:15", "19:30", "19:45", "20:00", "20:15", "20:30", "20:45", "21:00", "21:15", "21:30", "21:45", "22:00", "22:15", "22:30"]
 const PREFERRED_TIMES = [...LUNCH_TIMES, ...DINNER_TIMES]
 const DEFAULT_TIMES = ["20:00", "20:15", "20:30", "19:30", "19:45", "20:45", "21:00"]
 
@@ -37,7 +37,6 @@ export function AddTargetModal({
   const [dateEnd, setDateEnd] = useState("")  // Watch mode: optional end of date range
   const [partySize, setPartySize] = useState(2)
   const [preferredTimes, setPreferredTimes] = useState<string[]>(DEFAULT_TIMES)
-  const [customTime, setCustomTime] = useState("")
   const [snipeAt, setSnipeAt] = useState("")
   const [timezone, setTimezone] = useState("America/New_York")
   const [notificationEmail, setNotificationEmail] = useState("")
@@ -210,12 +209,6 @@ export function AddTargetModal({
     setPreferredTimes((prev) =>
       prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]
     )
-  }
-
-  function addCustomTime() {
-    if (!customTime || preferredTimes.includes(customTime)) return
-    setPreferredTimes((prev) => [...prev, customTime])
-    setCustomTime("")
   }
 
   async function handleSubmit() {
@@ -679,46 +672,6 @@ export function AddTargetModal({
               </div>
             </div>
           ))}
-
-          {/* Custom time — pick any time, not just the standard lunch/dinner chips */}
-          <div className="mb-2">
-            <p className="text-xs text-gray-600 uppercase tracking-wider mb-1.5">Custom time</p>
-            <div className="flex gap-2">
-              <input
-                type="time"
-                value={customTime}
-                onChange={(e) => setCustomTime(e.target.value)}
-                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-sm"
-              />
-              <button
-                type="button"
-                onClick={addCustomTime}
-                disabled={!customTime || preferredTimes.includes(customTime)}
-                className="bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-emerald-400 font-medium px-4 py-2 rounded-lg transition-colors text-sm"
-              >
-                Add
-              </button>
-            </div>
-            {preferredTimes.filter((t) => !PREFERRED_TIMES.includes(t)).length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-2">
-                {preferredTimes.filter((t) => !PREFERRED_TIMES.includes(t)).map((t) => {
-                  const [h, m] = t.split(":").map(Number)
-                  const label12 = isNaN(h) || isNaN(m) ? t : `${h > 12 ? h - 12 : h === 0 ? 12 : h}:${m.toString().padStart(2, "0")}${h >= 12 ? "pm" : "am"}`
-                  return (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => toggleTime(t)}
-                      title="Remove"
-                      className="px-3 py-2.5 rounded-lg text-xs font-medium bg-emerald-600 text-white transition-colors"
-                    >
-                      {label12} ✕
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-          </div>
 
           {/* Open times outside the standard chip set */}
           {mode !== "scheduled" && availTimes && availTimes.filter((t) => !PREFERRED_TIMES.includes(t)).length > 0 && (
