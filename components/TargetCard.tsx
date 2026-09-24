@@ -4,6 +4,7 @@ import { useState } from "react"
 
 const LUNCH_TIMES  = ["11:30", "11:45", "12:00", "12:15", "12:30", "12:45", "13:00", "13:15", "13:30"]
 const DINNER_TIMES = ["17:30", "17:45", "18:00", "18:15", "18:30", "18:45", "19:00", "19:15", "19:30", "19:45", "20:00", "20:15", "20:30", "20:45", "21:00", "21:15", "21:30", "21:45", "22:00", "22:15", "22:30"]
+const PREFERRED_TIMES = [...LUNCH_TIMES, ...DINNER_TIMES]
 
 function label12(t: string): string {
   const [h, m] = t.split(":").map(Number)
@@ -75,6 +76,7 @@ export function TargetCard({
   const [saving, setSaving] = useState(false)
   const [editError, setEditError] = useState("")
   const [editTimes, setEditTimes] = useState<string[]>(target.preferredTimes)
+  const [customEditTime, setCustomEditTime] = useState("")
   const [editPartySize, setEditPartySize] = useState(target.partySize)
   // YYYY-MM-DD for the date inputs. dateEnd is "" when there's no range.
   const isoDay = (d: Date | string) => new Date(d).toISOString().split("T")[0]
@@ -85,6 +87,7 @@ export function TargetCard({
 
   function startEdit() {
     setEditTimes(target.preferredTimes)
+    setCustomEditTime("")
     setEditPartySize(target.partySize)
     setEditDate(isoDay(target.date))
     setEditDateEnd(target.dateEnd ? isoDay(target.dateEnd) : "")
@@ -95,6 +98,12 @@ export function TargetCard({
 
   function toggleEditTime(t: string) {
     setEditTimes((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]))
+  }
+
+  function addCustomEditTime() {
+    if (!customEditTime || editTimes.includes(customEditTime)) return
+    setEditTimes((prev) => [...prev, customEditTime])
+    setCustomEditTime("")
   }
 
   async function handleSaveEdit() {
@@ -386,6 +395,42 @@ export function TargetCard({
                 </div>
               </div>
             ))}
+
+            {/* Custom time — pick any time, not just the standard lunch/dinner chips */}
+            <div className="mb-2">
+              <p className="text-xs text-gray-600 uppercase tracking-wider mb-1.5">Custom time</p>
+              <div className="flex gap-2">
+                <input
+                  type="time"
+                  value={customEditTime}
+                  onChange={(e) => setCustomEditTime(e.target.value)}
+                  className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={addCustomEditTime}
+                  disabled={!customEditTime || editTimes.includes(customEditTime)}
+                  className="bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-emerald-400 font-medium px-4 py-2 rounded-lg transition-colors text-xs"
+                >
+                  Add
+                </button>
+              </div>
+              {editTimes.filter((t) => !PREFERRED_TIMES.includes(t)).length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {editTimes.filter((t) => !PREFERRED_TIMES.includes(t)).map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => toggleEditTime(t)}
+                      title="Remove"
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 text-white transition-colors"
+                    >
+                      {label12(t)} ✕
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <p className="text-gray-500 text-xs mt-1">Times are tried in the order shown when you first added them. Newly added times are appended.</p>
           </div>
 
