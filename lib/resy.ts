@@ -1,4 +1,12 @@
+import { ProxyAgent, fetch as undiciFetch } from "undici"
+
 export const RESY_API_KEY = "VbWk7s3L4KiK5fzlO7JD3Q5EYolJI7n5"
+
+// Resy's Imperva WAF blocks Vercel's shared egress IP; route through a static
+// residential proxy (RESY_PROXY_URL) when configured. Falls back to the
+// platform's default egress if unset (e.g. local dev).
+const resyDispatcher = process.env.RESY_PROXY_URL ? new ProxyAgent(process.env.RESY_PROXY_URL) : undefined
+const dispatcherOpt = resyDispatcher ? { dispatcher: resyDispatcher } : {}
 
 const BASE_HEADERS = {
   origin: "https://resy.com",
@@ -25,13 +33,14 @@ export type ResyAuthResult = {
 
 export async function resyLogin(email: string, password: string): Promise<ResyAuthResult> {
   const body = new URLSearchParams({ email, password })
-  const res = await fetch("https://api.resy.com/3/auth/password", {
+  const res = await undiciFetch("https://api.resy.com/3/auth/password", {
     method: "POST",
     headers: BASE_HEADERS,
     body: body.toString(),
+    ...dispatcherOpt,
   })
   if (!res.ok) throw new Error(`Resy login failed: ${res.status}`)
-  const data = await res.json()
+  const data = (await res.json()) as any
   if (!data.token) throw new Error("Invalid credentials — no token returned")
   return {
     token: data.token,
@@ -53,12 +62,13 @@ export async function findSlots(
     party_size: String(partySize),
     venue_id: String(venueId),
   })
-  const res = await fetch(`https://api.resy.com/4/find?${params}`, {
+  const res = await undiciFetch(`https://api.resy.com/4/find?${params}`, {
     headers: BASE_HEADERS,
     signal: AbortSignal.timeout(3000),
+    ...dispatcherOpt,
   })
   if (!res.ok) throw new Error(`findSlots failed: ${res.status}`)
-  const data = await res.json()
+  const data = (await res.json()) as any
   const venues = data?.results?.venues
   if (!venues?.length) return []
   return venues[0]?.slots ?? []
@@ -110,12 +120,13 @@ export async function bookSlot(
     day: date,
     party_size: String(partySize),
   })
-  const detailRes = await fetch(`https://api.resy.com/3/details?${detailParams}`, {
+  const detailRes = await undiciFetch(`https://api.resy.com/3/details?${detailParams}`, {
     headers: BASE_HEADERS,
     signal: AbortSignal.timeout(5000),
+    ...dispatcherOpt,
   })
   if (!detailRes.ok) throw new Error(`getDetails failed: ${detailRes.status}`)
-  const details = await detailRes.json()
+  const details = (await detailRes.json()) as any
   const bookToken = details?.book_token?.value
   if (!bookToken) throw new Error("No book_token in details response")
 
@@ -124,16 +135,17 @@ export async function bookSlot(
     struct_payment_method: JSON.stringify({ id: Number(paymentMethodId) }),
     source_id: "resy.com-venue-details",
   })
-  const bookRes = await fetch("https://api.resy.com/3/book", {
+  const bookRes = await undiciFetch("https://api.resy.com/3/book", {
     method: "POST",
     headers: { ...BASE_HEADERS, "x-resy-auth-token": authToken },
     body: bookBody.toString(),
     signal: AbortSignal.timeout(5000),
+    ...dispatcherOpt,
   })
   if (!bookRes.ok) {
     const errText = await bookRes.text()
     throw new Error(`booking failed: ${bookRes.status} — ${errText}`)
   }
-  const bookData = await bookRes.json()
+  const bookData = (await bookRes.json()) as any
   return { reservationId: bookData.reservation_id ?? bookData.id ?? "unknown" }
 }
